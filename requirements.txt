@@ -1,0 +1,28 @@
+# ============================================
+# 评价爬虫器 - 依赖库清单
+# Python 版本要求: 3.13+
+# 安装: pip install -r requirements.txt --upgrade
+# ============================================
+
+# --- UI 框架 ---
+PySide6>=6.8.0
+
+# --- 网络请求 ---
+requests>=2.32.0
+
+# --- HTML 解析 ---
+beautifulsoup4>=4.12.0
+lxml>=5.3.0
+
+# --- Cookie 提取（Selenium 驱动系统浏览器） ---
+selenium>=4.20.0
+
+# --- UA 伪装 ---
+fake-useragent>=1.5.0
+
+# --- 文件导出 ---
+openpyxl>=3.1.0
+python-docx>=1.1.0
+
+# --- 打包工具（开发用，非运行时依赖） ---
+pyinstaller>=6.11.0

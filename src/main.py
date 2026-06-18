@@ -1,0 +1,169 @@
+"""
+模块名称：应用入口
+
+功能说明：
+    - PySide6 桌面应用的启动入口
+    - 配置高 DPI 自适应
+    - 初始化 QApplication
+    - 创建和显示主窗口
+    - 捕获全局异常，避免崩溃
+
+使用方式：
+    cd src && python main.py
+
+环境要求：
+    - Python 3.13+
+    - PySide6 6.8+
+    - 所有依赖库使用最新版本
+"""
+
+import sys
+import os
+import traceback
+
+# 确保项目根目录在 Python 路径中最前面
+# 这样包导入（from src.xxx import ...）才能正常工作
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_project_root = os.path.dirname(_current_dir)
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
+from src import __version__ as version
+
+# ---- 高 DPI 自适应（必须在 QApplication 创建之前配置） ----
+os.environ.setdefault("QT_AUTO_SCREEN_SCALE_FACTOR", "1")
+os.environ.setdefault("QT_ENABLE_HIGHDPI_SCALING", "1")
+
+
+def setup_high_dpi() -> None:
+    """
+    配置 Qt 高 DPI 自适应策略。
+
+    使用 PassThrough 策略允许 Qt 精确处理非整数缩放（如 125%、150%），
+    配合 QT_AUTO_SCREEN_SCALE_FACTOR=1 自动适配显示器 DPI。
+    """
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+    )
+
+
+def global_exception_handler(exc_type, exc_value, exc_tb) -> None:
+    """
+    全局异常处理函数。
+
+    捕获未处理的异常，记录到日志并显示错误对话框。
+    避免 PySide6 应用因单次未捕获异常而完全崩溃。
+
+    Args:
+        exc_type: 异常类型
+        exc_value: 异常实例
+        exc_tb: 堆栈回溯对象
+    """
+    # 忽略 KeyboardInterrupt（Ctrl+C 正常退出）
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_tb)
+        return
+
+    # 记录到日志
+    error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+    try:
+        from src.utils.logger import get_logger
+        logger = get_logger()
+        logger.critical(f"未捕获的异常:\n{error_msg}")
+    except Exception:
+        # 日志模块也可能出错，回退到 stderr
+        sys.stderr.write(error_msg)
+
+    # 显示错误对话框（如果 QApplication 已创建）
+    try:
+        from PySide6.QtWidgets import QMessageBox, QApplication
+
+        app = QApplication.instance()
+        if app:
+            QMessageBox.critical(
+                None,
+                "程序异常",
+                f"程序发生未预期错误，建议重启应用。\n\n错误: {exc_value}",
+            )
+    except Exception:
+        pass
+
+
+def main() -> int:
+    """
+    应用主函数。
+
+    执行流程：
+    1. 配置高 DPI
+    2. 注册全局异常处理器
+    3. 创建 QApplication
+    4. 应用暗夜绿主题
+    5. 创建并显示主窗口
+    6. 进入 Qt 事件循环
+
+    Returns:
+        进程退出码
+    """
+    # ---- 高 DPI 配置 ----
+    setup_high_dpi()
+
+    # ---- 全局异常处理 ----
+    sys.excepthook = global_exception_handler
+
+    # ---- 创建应用 ----
+    from PySide6.QtWidgets import QApplication as QA
+
+    app = QA(sys.argv)
+    app.setApplicationName("评价爬虫器")
+    app.setApplicationVersion(version)
+    app.setOrganizationName("TourCrawler")
+
+    # 禁止未聚焦的输入控件响应滚轮（防止滚动页面时误改数值）
+    from PySide6.QtCore import QEvent, QObject
+    from PySide6.QtWidgets import QSpinBox, QDoubleSpinBox, QComboBox
+
+    class _WheelGuard(QObject):
+        _BLOCKED = (QSpinBox, QDoubleSpinBox, QComboBox)
+
+        def eventFilter(self, obj, event):
+            if event.type() == QEvent.Type.Wheel:
+                if isinstance(obj, self._BLOCKED) and not obj.hasFocus():
+                    return True
+            return super().eventFilter(obj, event)
+
+    app.installEventFilter(_WheelGuard(app))
+
+    # 设置应用图标（兼容开发模式和 PyInstaller 打包）
+    from PySide6.QtGui import QIcon
+    from pathlib import Path
+    if getattr(sys, 'frozen', False):
+        base = Path(sys._MEIPASS)
+    else:
+        base = Path(_current_dir)
+    app.setWindowIcon(QIcon(str(base / "assets" / "app.ico")))
+
+    # ---- 初始化日志 ----
+    from src.utils.logger import get_logger
+    logger = get_logger()
+    logger.info(f"应用启动 (Python {sys.version})")
+
+    # ---- 创建主窗口 ----
+    from src.ui.main_window import MainWindow
+
+    window = MainWindow()
+    window.show()
+
+    logger.info("主窗口已显示")
+
+    # ---- 进入事件循环 ----
+    exit_code = app.exec()
+
+    logger.info(f"应用退出, 退出码: {exit_code}")
+    return exit_code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

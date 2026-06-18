@@ -1,0 +1,39 @@
+# Python 编译缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 打包构建产物
+build/
+dist/
+*.spec
+
+# 运行时数据（Cookie、日志、导出文件、任务进度）
+cookies/
+logs/
+exports/
+tasks/
+
+# 用户配置与统计
+settings.json
+stats.json
+
+# 虚拟环境
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 测试缓存
+.pytest_cache/

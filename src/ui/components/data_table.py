@@ -61,16 +61,16 @@ class ReviewTableModel(QAbstractTableModel):
             return str(value) if value is not None else ""
 
         if role == Qt.ItemDataRole.ForegroundRole:
-            # 评分列颜色
+            # 评分列颜色（双主题通用深色变体）
             if field == "rating":
                 try:
                     r = int(value)
                     if r >= 4:
-                        return QColor("#00E676")
+                        return QColor("#00A844")
                     elif r >= 3:
-                        return QColor("#FFAB00")
+                        return QColor("#E65100")
                     else:
-                        return QColor("#FF5252")
+                        return QColor("#C62828")
                 except (ValueError, TypeError):
                     pass
 
@@ -124,7 +124,7 @@ class DataTable(QWidget):
         self._search_input.textChanged.connect(self._on_search)
 
         self._page_label = QLabel("第 1 页 / 共 0 页")
-        self._page_label.setStyleSheet("color: #999999; font-size: 12px;")
+        self._page_label.setObjectName("dataTablePageLabel")
 
         self._prev_btn = QPushButton("上一页")
         self._prev_btn.setObjectName("secondaryBtn")

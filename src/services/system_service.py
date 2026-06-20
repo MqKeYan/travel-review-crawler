@@ -9,9 +9,11 @@
 """
 
 import json
+import copy
 import shutil
 import time
 import logging
+import sys
 from datetime import datetime
 from typing import Any
 
@@ -37,7 +39,7 @@ DEFAULT_SETTINGS = {
         "y": None,
         "sidebar_width": 130,
     },
-    "theme": "dark_forest",
+    "theme": "dark",
     "notifications": {
         "desktop_popup": True,
         "sound_enabled": True,
@@ -55,8 +57,12 @@ DEFAULT_SETTINGS = {
     },
     "crawl": {
         "default_max_count": 500,
-        "default_delay_min": 0.5,
-        "default_delay_max": 5.0,
+        "default_max_pages": None,
+        "default_delay_seconds": 2,
+        "default_remove_images": False,
+        "default_remove_emoji": False,
+        "default_skip_pure_emoji": False,
+        "default_ad_filter": False,
     },
 }
 
@@ -71,7 +77,7 @@ class SystemService:
 
     def __init__(self):
         self._start_time = time.time()
-        self._settings = DEFAULT_SETTINGS.copy()
+        self._settings = copy.deepcopy(DEFAULT_SETTINGS)
         self._load_settings()
 
     def _load_settings(self) -> None:
@@ -87,9 +93,17 @@ class SystemService:
                 logger.warning(f"加载设置失败，使用默认设置: {e}")
 
     def _save_settings(self) -> None:
-        """保存设置到 settings.json"""
+        """保存设置到 settings.json，清理已废弃的旧字段"""
         path = get_settings_path()
         try:
+            # 清理 crawl 中不在默认模板里的废弃字段
+            for section, defaults in DEFAULT_SETTINGS.items():
+                if isinstance(defaults, dict) and section in self._settings:
+                    clean = {}
+                    for k, v in self._settings[section].items():
+                        if k in defaults:
+                            clean[k] = v
+                    self._settings[section] = clean
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(self._settings, f, ensure_ascii=False, indent=2)
         except OSError as e:
@@ -121,13 +135,45 @@ class SystemService:
         except Exception:
             cookie_count = 0
 
-        # 数据目录所在磁盘剩余空间 (GB)
+        # 软件实时内存占用 (MB)
+        try:
+            import psutil
+            process = psutil.Process()
+            mem_info = process.memory_info()
+            memory_mb = int(mem_info.rss / (1024 * 1024))
+        except Exception:
+            memory_mb = 0
+
+        # 软件数据目录硬盘占用 (MB)
         try:
             data_dir = get_data_dir()
+            app_disk_mb = int(sum(
+                f.stat().st_size for f in data_dir.rglob("*") if f.is_file()
+            ) / (1024 * 1024))
+        except Exception:
+            app_disk_mb = 0
+
+        # 软件实时 CPU 占用 (%)
+        try:
+            cpu_percent = process.cpu_percent(interval=0)
+        except Exception:
+            cpu_percent = 0.0
+
+        # 数据目录所在磁盘剩余空间 (GB)
+        try:
             usage = shutil.disk_usage(data_dir)
             disk_free_gb = int(usage.free / (1024 ** 3))
         except Exception:
             disk_free_gb = 0
+
+        # 代理状态
+        proxy_enabled = self._settings.get("proxy", {}).get("enabled", False)
+
+        # 网络延迟 (ms, 通过百度检测)
+        latency_ms = self._ping_latency() if hasattr(self, '_last_latency') else 0
+        if not hasattr(self, '_last_latency'):
+            self._last_latency = 0
+            self._last_latency_time = 0
 
         # 格式化启动时间
         started_at = datetime.fromtimestamp(self._start_time).strftime("%Y-%m-%d %H:%M")
@@ -138,9 +184,30 @@ class SystemService:
             "data_dir": get_data_dir_display(),
             "data_dir_writable": is_data_dir_writable(),
             "cookie_count": cookie_count,
+            "cpu_percent": round(cpu_percent, 1),
+            "memory_mb": memory_mb,
+            "app_disk_mb": app_disk_mb,
             "disk_free_gb": disk_free_gb,
+            "proxy_enabled": proxy_enabled,
+            "latency_ms": self._last_latency,
             "started_at": started_at,
         }
+
+    def _ping_latency(self) -> int:
+        """后台异步检测网络延迟（到百度），缓存结果避免频繁请求"""
+        import time as _time
+        now = _time.time()
+        if now - getattr(self, '_last_latency_time', 0) < 5:
+            return getattr(self, '_last_latency', 0)
+        try:
+            import requests
+            start = _time.time()
+            requests.get("https://www.baidu.com", timeout=3)
+            self._last_latency = int((_time.time() - start) * 1000)
+        except Exception:
+            self._last_latency = -1
+        self._last_latency_time = now
+        return self._last_latency
 
     def get_settings(self) -> dict:
         """获取完整设置字典"""
@@ -177,6 +244,76 @@ class SystemService:
         """
         self._deep_merge(self._settings, new_settings)
         self._save_settings()
+
+    def get_theme(self) -> str:
+        """
+        获取当前主题标识，若为 "auto" 则自动检测系统主题。
+
+        兼容旧版 "dark_forest" → "dark" 映射。
+
+        Returns:
+            实际主题标识 ("dark" 或 "light")
+        """
+        theme = self._settings.get("theme", "dark")
+        # 兼容旧版主题名称
+        if theme == "dark_forest":
+            theme = "dark"
+        if theme not in ("dark", "light", "auto"):
+            theme = "dark"
+        if theme == "auto":
+            return self.detect_system_theme()
+        return theme
+
+    def get_raw_theme(self) -> str:
+        """
+        获取用户设置的主题标识（不解析 auto）。
+
+        Returns:
+            原始主题标识 ("dark" / "light" / "auto")
+        """
+        theme = self._settings.get("theme", "dark")
+        if theme == "dark_forest":
+            theme = "dark"
+        if theme not in ("dark", "light", "auto"):
+            theme = "dark"
+        return theme
+
+    def set_theme(self, theme: str) -> None:
+        """
+        设置主题。
+
+        Args:
+            theme: 主题标识 ("dark" / "light" / "auto")
+        """
+        if theme in ("dark", "light", "auto"):
+            self._settings["theme"] = theme
+            self._save_settings()
+
+    @staticmethod
+    def detect_system_theme() -> str:
+        """
+        检测 Windows 系统主题。
+
+        通过注册表读取 AppsUseLightTheme 键值：
+        1 = 浅色主题 → "light"
+        0 = 深色主题 → "dark"
+
+        Returns:
+            系统主题标识 ("dark" 或 "light")
+        """
+        if sys.platform != "win32":
+            return "dark"
+        try:
+            import winreg
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+            )
+            value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            winreg.CloseKey(key)
+            return "light" if value == 1 else "dark"
+        except Exception:
+            return "dark"
 
     def test_proxy(self, proxy_url: str) -> bool:
         """

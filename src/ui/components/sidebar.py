@@ -1,8 +1,8 @@
 """
-模块名称：暗夜绿风格侧边栏
+模块名称：暗夜绿风格侧边栏 (Enhanced)
 
 功能说明：
-    - 左侧导航侧边栏，纯中文文字按钮
+    - 左侧导航侧边栏，带图标的文字按钮
     - 四个核心页面的切换导航
     - 当前选中页面高亮显示
 
@@ -20,7 +20,7 @@ from PySide6.QtGui import QFont, QCursor
 
 class Sidebar(QWidget):
     """
-    暗夜绿风格侧边栏 — 纯文字导航。
+    暗夜绿风格侧边栏 — 图标+文字导航。
 
     Signal:
         page_changed(int): 页面切换信号，参数为页面索引 (0~3)
@@ -42,10 +42,10 @@ class Sidebar(QWidget):
         self._setup_ui()
 
     def _setup_ui(self) -> None:
-        """初始化侧边栏 UI：垂直排列文字按钮"""
+        """初始化侧边栏 UI：图标+文字的垂直按钮"""
         layout = QVBoxLayout()
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(6)
+        layout.setContentsMargins(4, 10, 4, 10)
+        layout.setSpacing(4)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         # 按钮组：保证单选效果
@@ -55,9 +55,10 @@ class Sidebar(QWidget):
         for idx, (text, _) in enumerate(self.PAGE_BUTTONS):
             btn = QPushButton(text)
             btn.setCheckable(True)
-            btn.setMinimumHeight(46)
+            btn.setMinimumHeight(44)
             btn.setFont(QFont("微软雅黑", 14))
             btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            btn.setToolTip(text)
 
             self._button_group.addButton(btn, idx)
             layout.addWidget(btn)

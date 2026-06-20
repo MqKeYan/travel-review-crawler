@@ -120,6 +120,9 @@ def main() -> int:
     app.setApplicationName("评价爬虫器")
     app.setApplicationVersion(version)
     app.setOrganizationName("TourCrawler")
+    # 显式声明：最后一个窗口关闭时退出应用
+    # 配合 closeEvent 中的线程清理，确保彻底退出
+    app.setQuitOnLastWindowClosed(True)
 
     # 禁止未聚焦的输入控件响应滚轮（防止滚动页面时误改数值）
     from PySide6.QtCore import QEvent, QObject
@@ -162,8 +165,29 @@ def main() -> int:
     exit_code = app.exec()
 
     logger.info(f"应用退出, 退出码: {exit_code}")
+
+    # ---- 确保进程完全退出（PyInstaller 打包模式） ----
+    # 关闭所有可能的后台资源
+    try:
+        import gc
+        # 强制触发垃圾回收，释放未关闭的文件句柄和连接
+        gc.collect()
+    except Exception:
+        pass
+
+    # 对于 PyInstaller 打包的 exe，使用 os._exit 确保进程彻底退出
+    # 避免因残留的 daemon 线程、pending futures 或 DLL 导致进程挂起
+    if getattr(sys, 'frozen', False):
+        import os as _os
+        _os._exit(exit_code)
+
     return exit_code
 
 
 if __name__ == "__main__":
+    # PyInstaller 打包模式：multiprocessing.freeze_support()
+    # 防止 Windows 下产生孤儿进程
+    from multiprocessing import freeze_support
+    freeze_support()
+
     sys.exit(main())

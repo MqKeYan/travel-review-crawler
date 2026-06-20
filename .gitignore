@@ -7,13 +7,13 @@ __pycache__/
 # 打包构建产物
 build/
 dist/
-*.spec
 
-# 运行时数据（Cookie、日志、导出文件、任务进度）
+# 运行时数据
 cookies/
 logs/
 exports/
 tasks/
+images/
 
 # 用户配置与统计
 settings.json

@@ -120,11 +120,11 @@ class CrawlWorker(QThread):
 
                 total_count = self._resume_count + total
                 scrape_config = self._config.scrape_config
-                target = scrape_config.max_count
+                target = scrape_config.max_count or 0
 
                 progress_data = {
                     "current": total_count,
-                    "total": target,
+                    "total": target if target > 0 else total_count,
                     "percentage": min(int(total_count / target * 100), 100) if target > 0 else 0,
                     "current_page": page_num or 0,
                     "message": message or (f"正在爬取第 {page_num} 页..." if page_num else ""),
@@ -154,6 +154,20 @@ class CrawlWorker(QThread):
                 f"过滤完成: 保留 {len(passed)} 条，"
                 f"过滤掉 {len(rejected)} 条"
             )
+
+            # ---- 下载评论图片到本地 ----
+            # 只有未被停止的任务才下载图片
+            if not self._stopped and self._reviews:
+                try:
+                    from src.engine.image_downloader import download_images_for_task
+
+                    download_images_for_task(
+                        reviews=self._reviews,
+                        task_name=self._config.task_name,
+                        progress_callback=None,  # 不阻塞，静默下载
+                    )
+                except Exception as e:
+                    logger.warning(f"图片下载出错（评论数据不受影响）: {e}")
 
             # ---- 完成 ----
             elapsed = time.time() - self._start_time
@@ -263,7 +277,7 @@ class CrawlWorker(QThread):
 
     def _calculate_eta(self, current: int, target: int) -> str:
         """计算预计剩余时间"""
-        if current <= 0 or target <= 0:
+        if current <= 0 or not target or target <= 0:
             return ""
         elapsed = time.time() - self._start_time
         if elapsed < 5:

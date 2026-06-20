@@ -19,7 +19,7 @@ import json
 import time
 import logging
 
-from src.sites.base import SiteAdapter, RequestType, HttpMethod
+from src.sites.base import SiteAdapter, HttpMethod
 from src.models.review import EMPTY_REVIEW
 
 logger = logging.getLogger("tour-crawler.sites.ctrip")
@@ -165,7 +165,7 @@ def _dedup_reviews(reviews: list[dict]) -> list[dict]:
 
 def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
                          timeout: int = 300, stop_check=None,
-                         progress_callback=None) -> list[dict]:
+                         progress_callback=None, cookie_file=None) -> list[dict]:
     """
     通过 Selenium 驱动 Edge 浏览器，点击「下一页」翻页爬取携程评论。
 
@@ -313,10 +313,8 @@ def create_ctrip_adapter() -> SiteAdapter:
         site_display_name="携程",
         domain=".ctrip.com",
         login_url="https://passport.ctrip.com/user/login",
-        request_type=RequestType.HTML,
+        url_template="https://you.ctrip.com/sight/{id}.html",
         http_method=HttpMethod.GET,
-        api_endpoint="",
-        api_params_template={},
         page_size=10,
         page_start=1,
         max_pages_limit=100,
@@ -324,7 +322,5 @@ def create_ctrip_adapter() -> SiteAdapter:
         custom_extractor=None,
         raw_html_parser=extract_reviews_from_html,
         selenium_crawler=selenium_crawl_ctrip,
-        reviews_json_path="",
-        total_count_json_path="",
         field_mapping={},
     )

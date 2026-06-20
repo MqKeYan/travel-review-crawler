@@ -32,7 +32,7 @@ class SiteService:
             >>> service.get_preset_sites()
             [
                 {"name": "ctrip", "display_name": "携程", "domain": ".ctrip.com"},
-                {"name": "meituan", "display_name": "美团", "domain": ".meituan.com"},
+                {"name": "dianping", "display_name": "大众点评", "domain": ".dianping.com"},
             ]
         """
         return get_preset_sites()

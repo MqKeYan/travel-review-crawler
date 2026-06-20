@@ -12,10 +12,10 @@
     │  侧边栏   │    列表栏         │        内容区                  │
     │  (60px)  │    (280px)       │        (自适应)                │
     │          │                  │                              │
-    │  🏠 首页  │  (各页面自定)     │  QStackedWidget 页面容器       │
-    │  📋 任务  │                  │  首页/任务/数据/设置          │
-    │  📊 数据  │                  │                              │
-    │  ⚙️ 设置  │                  │                              │
+    │  首页    │  (各页面自定)     │  QStackedWidget 页面容器       │
+    │  任务    │                  │  首页/任务/数据/设置          │
+    │  数据    │                  │                              │
+    │  设置    │                  │                              │
     └──────────┴──────────────────┴──────────────────────────────┘
 """
 
@@ -32,7 +32,7 @@ from PySide6.QtCore import Qt, QTimer, QUrl, QObject, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtMultimedia import QSoundEffect
 
-from src.ui.theme.dark_forest_theme import get_dark_forest_stylesheet
+from src.ui.theme.dark_forest_theme import get_dark_forest_stylesheet, get_light_stylesheet, THEME_STYLESHEETS
 from src.ui.components.sidebar import Sidebar
 from src.ui.pages.home_page import HomePage
 from src.ui.pages.task_page import TaskPage
@@ -133,8 +133,8 @@ class MainWindow(QMainWindow):
 
         # ===== 第一栏：侧边栏 =====
         self._sidebar = Sidebar()
-        self._sidebar.setFixedWidth(130)
-        self._sidebar.setMinimumWidth(120)
+        self._sidebar.setFixedWidth(145)
+        self._sidebar.setMinimumWidth(130)
 
         # ===== 第二栏：内容区（QStackedWidget） =====
         self._stack = QStackedWidget()
@@ -221,10 +221,72 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-    def _apply_theme(self) -> None:
-        """应用暗夜绿 QSS 主题"""
-        stylesheet = get_dark_forest_stylesheet()
+    def _apply_theme(self, theme: str | None = None) -> None:
+        """
+        应用 QSS 主题 + 窗口标题栏颜色。
+
+        Args:
+            theme: 主题标识 ("dark" / "light" / "auto")，None 时从设置读取。
+                   自动解析 "auto" 为系统实际主题。
+        """
+        if theme is None:
+            theme = self._system_service.get_theme()
+        elif theme == "auto":
+            theme = self._system_service.detect_system_theme()
+
+        getter = THEME_STYLESHEETS.get(theme, get_dark_forest_stylesheet)
+        stylesheet = getter()
         self.setStyleSheet(stylesheet)
+
+        # 适配 Windows 标题栏颜色
+        self._apply_titlebar_theme(theme)
+
+        logger.info(f"主题已切换为: {theme}")
+
+    def _apply_titlebar_theme(self, theme: str) -> None:
+        """
+        设置 Windows 标题栏颜色以匹配软件主题色系。
+
+        暗夜绿 → 深色标题栏 (#0f120f)
+        晨曦绿 → 浅色标题栏 (#f5f7f5)
+
+        通过 Windows DWM API 实现：
+        - Windows 10: DWMWA_USE_IMMERSIVE_DARK_MODE (暗/亮模式)
+        - Windows 11: DWMWA_CAPTION_COLOR (自定义标题栏颜色)
+        """
+        import ctypes
+        from ctypes import wintypes
+
+        try:
+            hwnd = int(self.winId())
+        except Exception:
+            return
+
+        # --- Windows 11: 自定义标题栏背景色 ---
+        # DWMWA_CAPTION_COLOR = 35
+        try:
+            color_value = 0x000F120F if theme == "dark" else 0x00F5F7F5  # BGR
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                wintypes.HWND(hwnd),
+                ctypes.c_uint(35),
+                ctypes.byref(ctypes.c_uint(color_value)),
+                ctypes.sizeof(ctypes.c_uint),
+            )
+        except Exception:
+            pass
+
+        # --- Windows 10: 沉浸式暗色/亮色标题栏 ---
+        # DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+        try:
+            dark_mode = ctypes.c_int(1 if theme == "dark" else 0)
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                wintypes.HWND(hwnd),
+                ctypes.c_uint(20),
+                ctypes.byref(dark_mode),
+                ctypes.sizeof(dark_mode),
+            )
+        except Exception:
+            pass
 
     def _connect_signals(self) -> None:
         """连接各组件之间的 Signal 和 Slot"""
@@ -256,6 +318,7 @@ class MainWindow(QMainWindow):
         # ---- 设置页面 ----
         self._settings_page.settings_updated.connect(self._on_settings_updated)
         self._settings_page.proxy_test_requested.connect(self._on_test_proxy)
+        self._settings_page.theme_changed.connect(self._on_theme_changed)
         self._settings_page.clear_data_requested.connect(self._on_clear_data)
         self._settings_page.reset_settings_requested.connect(self._on_reset_settings)
         self._settings_page.reinitialize_requested.connect(self._on_reinitialize)
@@ -270,6 +333,9 @@ class MainWindow(QMainWindow):
 
         # 跳转到目标页面（移除后索引恢复为 0=首页 1=任务 2=数据 3=设置）
         if page_index < self._stack.count():
+            # 离开任务页时清空选中状态
+            if page_index != 1:
+                self._task_page.clear_detail()
             self._stack.setCurrentIndex(page_index)
 
             # 切换到任务页时刷新列表
@@ -297,6 +363,11 @@ class MainWindow(QMainWindow):
         # 传入已有任务名称用于查重
         existing = list(self._task_service._tasks.keys())
         self._create_task_page.set_existing_tasks(existing)
+        # 传入参数默认值（直接从磁盘读取，确保与设置页同步）
+        defaults = self._system_service.get_setting("crawl", {})
+        self._create_task_page.set_defaults(dict(defaults))
+        # 重置表单为默认状态
+        self._create_task_page.reset_form()
         # 在索引 1（任务页）之后插入新建页面
         self._stack.insertWidget(2, self._create_task_page)
         self._stack.setCurrentIndex(2)
@@ -308,6 +379,7 @@ class MainWindow(QMainWindow):
 
         # 移除新建页面，回到任务列表
         self._stack.removeWidget(self._create_task_page)
+        self._task_page.clear_detail()
         self._stack.setCurrentIndex(1)
 
         # 刷新任务列表
@@ -684,13 +756,15 @@ class MainWindow(QMainWindow):
 
     # ==================== 设置 ====================
 
-    def _on_settings_updated(self, settings: dict) -> None:
-        """设置更新处理"""
-        self._system_service.update_settings(settings)
-        QMessageBox.information(self, "提示", "设置已保存")
+    def _on_theme_changed(self, theme: str) -> None:
+        """实时主题切换（从设置页面下拉框触发）"""
+        self._apply_theme(theme)
+        # 立即持久化主题偏好（包括 "auto"）
+        self._system_service.set_theme(theme)
 
-        # 刷新设置页面
-        self._refresh_settings_page()
+    def _on_settings_updated(self, settings: dict) -> None:
+        """设置更新处理（自动静默保存）"""
+        self._system_service.update_settings(settings)
 
     def _on_test_proxy(self, proxy_url: str) -> None:
         """测试代理连通性"""
@@ -850,7 +924,8 @@ class MainWindow(QMainWindow):
         """
         窗口关闭事件。
 
-        保存窗口状态和设置，检测未导出数据时弹窗提醒。
+        保存窗口状态和设置，检测未导出数据时弹窗提醒，
+        等待所有后台工作线程退出后再关闭进程。
         """
         # 保存窗口状态
         settings = self._system_service.get_settings()
@@ -883,16 +958,79 @@ class MainWindow(QMainWindow):
         elapsed = int(time.time() - self._system_service._start_time)
         self._stats_service.add_run_seconds(elapsed)
 
-        # 仅停止正在运行/暂停的任务（标记为已完成，保留已爬数据）
-        # 已完成/出错/待开始的任务状态保持不变
+        # 第一步：断开所有工作线程的信号连接，防止关闭过程中触发 UI 更新
+        for task_name, worker in list(self._task_service._workers.items()):
+            try:
+                worker.progress.disconnect()
+                worker.complete.disconnect()
+                worker.error.disconnect()
+                worker.log.disconnect()
+            except (TypeError, RuntimeError):
+                pass  # 信号可能已断开
+
+        # 第二步：发送停止信号给所有正在运行/暂停的任务
         for task_name, task in list(self._task_service._tasks.items()):
             if task.status in (TaskStatus.RUNNING, TaskStatus.PAUSED):
                 self._task_service.stop_task(task_name, complete_early=True)
 
+        # 第三步：等待所有工作线程退出（最多等待 8 秒）
+        max_wait_ms = 8000
+        for task_name, worker in list(self._task_service._workers.items()):
+            if worker.isRunning():
+                logger.info(f"等待工作线程 [{task_name}] 退出...")
+                if not worker.wait(min(max_wait_ms, 3000)):
+                    logger.warning(f"工作线程 [{task_name}] 未能在 3 秒内退出，强制终止")
+                    worker.terminate()
+                    worker.wait(2000)  # 等待 terminate 生效
+                max_wait_ms -= 3000
+                if max_wait_ms <= 0:
+                    # 超时保护：不再等待剩余线程，直接强制终止
+                    break
+
+        # 第四步：强制终止剩余未退出的线程
+        for task_name, worker in list(self._task_service._workers.items()):
+            if worker.isRunning():
+                logger.warning(f"工作线程 [{task_name}] 超时未退出，强制终止")
+                worker.terminate()
+                worker.wait(1000)
+
+        # 清除缓存的评论图片
+        self._clear_cached_images()
+
         shutdown_logger()
         event.accept()
 
+    def _clear_cached_images(self) -> None:
+        """
+        清除缓存的评论图片目录。
+
+        软件关闭时自动清理，释放磁盘空间。
+        已导出的文件不受影响。
+        """
+        import shutil
+        from src.utils.paths import get_images_dir
+
+        images_dir = get_images_dir()
+        if not images_dir.exists():
+            return
+
+        try:
+            count = sum(1 for _ in images_dir.rglob("*") if _.is_file())
+            shutil.rmtree(images_dir)
+            logger.info(f"已清除缓存图片: {count} 个文件")
+        except OSError as e:
+            logger.warning(f"清除缓存图片失败: {e}")
+
     def quit_app(self) -> None:
-        """退出应用程序（从托盘菜单）"""
+        """退出应用程序（从托盘菜单）。
+
+        先调用 close() 触发 closeEvent 中的清理逻辑，
+        再调用 QApplication.quit() 确保事件循环退出。
+        """
         self.close()
+        # closeEvent 已处理线程清理，此处确保进程退出
         QApplication.quit()
+        # 使用 os._exit(0) 作为兜底，防止 PyInstaller 打包后
+        # 因残留的非 daemon 线程导致进程无法退出
+        import os as _os
+        QTimer.singleShot(3000, lambda: _os._exit(0))

@@ -135,7 +135,7 @@ class TaskConfig:
 
     Attributes:
         task_name: 任务名称（用户自定义，如 "黄山风景区评论"）
-        site: 网站标识（"ctrip"、"meituan" 等）
+        site: 网站标识（"ctrip"、"dianping" 等）
         target_url: 目标景区评论页面 URL
         cookie_file: Cookie 文件名（如 "ctrip.json"），空则不使用 Cookie
         scrape_config: 爬取范围配置

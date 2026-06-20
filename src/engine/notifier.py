@@ -54,7 +54,7 @@ class Notifier:
     Usage:
         notifier = Notifier(settings)
         notifier.notify_complete("携程-黄山", 200)
-        notifier.notify_error("美团-故宫", "网络连接失败")
+        notifier.notify_error("携程-故宫", "网络连接失败")
     """
 
     def __init__(self, settings: NotificationSettings | None = None):

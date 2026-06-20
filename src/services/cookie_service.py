@@ -14,7 +14,10 @@ from src.engine.cookie_manager import (
     load_cookies_from_file,
     get_cookie_file_path,
     delete_cookie_file,
+    list_cookies_for_platform,
+    get_all_platform_cookies,
 )
+from src.utils.paths import get_cookies_dir, get_cookie_platform_dir
 from src.utils.exceptions import CookieExtractError
 
 logger = logging.getLogger("tour-crawler.cookie_service")
@@ -28,13 +31,13 @@ class CookieService:
     打开浏览器 → 等待登录 → 提取 → 保存 → 关闭浏览器。
     """
 
-    def auto_extract_cookies(self, site: str, login_url: str, cookie_name: str,
+    def auto_extract_cookies(self, platform: str, login_url: str, cookie_name: str,
                              status_callback=None) -> bool:
         """
         一键自动获取 Cookie。
 
         Args:
-            site: 网站标识
+            platform: 平台标识（如 "ctrip"）
             login_url: 登录页 URL
             cookie_name: 保存的文件名（不含 .json）
             status_callback: 状态回调函数 status(text)
@@ -43,9 +46,9 @@ class CookieService:
             True 表示获取并保存成功
         """
         from src.sites import get_site_adapter
-        adapter = get_site_adapter(site)
+        adapter = get_site_adapter(platform)
         if adapter is None:
-            logger.error(f"不支持的网站: {site}")
+            logger.error(f"不支持的平台: {platform}")
             return False
 
         domain = adapter.domain
@@ -59,8 +62,8 @@ class CookieService:
                 logger.warning("未获取到 Cookie（超时或取消）")
                 return False
 
-            save_cookies_to_file(cookie_name, cookies, "selenium-auto")
-            logger.info(f"Cookie 自动保存成功: {cookie_name} ({len(cookies)} 条)")
+            save_cookies_to_file(platform, cookie_name, cookies, "selenium-auto")
+            logger.info(f"Cookie 自动保存成功: {platform}/{cookie_name} ({len(cookies)} 条)")
             return True
 
         except CookieExtractError as e:
@@ -69,34 +72,47 @@ class CookieService:
                 status_callback(f"失败: {e}")
             return False
 
-    def load_cookies(self, site: str) -> list[dict] | None:
+    def load_cookies(self, platform: str, cookie_name: str) -> list[dict] | None:
         """读取已保存的 Cookie 文件"""
-        return load_cookies_from_file(site)
+        return load_cookies_from_file(platform, cookie_name)
 
-    def get_cookie_path(self, site: str) -> str:
+    def get_cookie_path(self, platform: str, cookie_name: str) -> str:
         """获取 Cookie 文件路径"""
-        return get_cookie_file_path(site)
+        return get_cookie_file_path(platform, cookie_name)
 
-    def has_cookie(self, site: str) -> bool:
-        """检查是否存在 Cookie 文件"""
-        from src.utils.paths import get_cookies_dir
-        return (get_cookies_dir() / f"{site}.json").exists()
+    def has_cookie(self, platform: str, cookie_name: str) -> bool:
+        """检查指定平台的指定 Cookie 文件是否存在"""
+        return (get_cookie_platform_dir(platform) / f"{cookie_name}.json").exists()
 
-    def delete_cookie(self, site: str) -> bool:
-        """删除 Cookie 文件"""
-        return delete_cookie_file(site)
+    def has_any_cookie(self, platform: str) -> bool:
+        """检查指定平台是否有任何已保存的 Cookie"""
+        return len(list_cookies_for_platform(platform)) > 0
+
+    def list_platform_cookies(self, platform: str) -> list[str]:
+        """列出指定平台下所有已保存的 Cookie 名称"""
+        return list_cookies_for_platform(platform)
+
+    def delete_cookie(self, platform: str, cookie_name: str) -> bool:
+        """删除指定平台的 Cookie 文件"""
+        return delete_cookie_file(platform, cookie_name)
 
     def clear_all(self) -> int:
         """
-        删除所有已保存的 Cookie 文件。
+        删除所有已保存的 Cookie 文件（包括各平台子目录及旧版根目录文件）。
 
         Returns:
             删除的文件数量
         """
-        from src.utils.paths import get_cookies_dir
         cookies_dir = get_cookies_dir()
         count = 0
         try:
+            # 删除各平台子目录内的文件
+            for item in cookies_dir.iterdir():
+                if item.is_dir():
+                    for f in item.glob("*.json"):
+                        f.unlink()
+                        count += 1
+            # 删除旧版根目录下的 .json 文件
             for f in cookies_dir.glob("*.json"):
                 f.unlink()
                 count += 1

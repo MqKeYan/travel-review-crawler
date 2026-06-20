@@ -56,12 +56,12 @@ class TaskCard(QFrame):
         header = QHBoxLayout()
 
         name_label = QLabel(self._task.task_name or "未命名任务")
-        name_label.setFont(QFont("微软雅黑", 13, QFont.Weight.Bold))
-        name_label.setStyleSheet("color: #E0E0E0;")
+        name_label.setFont(QFont("微软雅黑", 15, QFont.Weight.Bold))
+        name_label.setObjectName("taskCardName")
 
         sc = self.STATUS_CONFIG.get(self._task.status, self.STATUS_CONFIG[TaskStatus.PENDING])
         self._status_label = QLabel(sc[0])
-        self._status_label.setStyleSheet(f"color: {sc[2]}; font-weight: bold; font-size: 12px;")
+        self._status_label.setStyleSheet(f"color: {sc[2]}; font-weight: bold; font-size: 14px;")
 
         header.addWidget(name_label)
         header.addStretch()
@@ -72,10 +72,10 @@ class TaskCard(QFrame):
         info = QHBoxLayout()
 
         site_label = QLabel(f"网站: {self._task.site_display_name or self._task.site}")
-        site_label.setStyleSheet("color: #999999; font-size: 12px;")
+        site_label.setObjectName("taskMiniSite")
 
         time_label = QLabel(f"创建: {self._task.created_at}")
-        time_label.setStyleSheet("color: #666666; font-size: 11px;")
+        time_label.setObjectName("taskMiniTime")
 
         info.addWidget(site_label)
         info.addStretch()
@@ -94,15 +94,15 @@ class TaskCard(QFrame):
         p = self._task.progress
         if self._task.status == TaskStatus.RUNNING and p.total > 0:
             lbl = QLabel(f"进度: {p.current}/{p.total} ({p.percentage:.0f}%)")
-            lbl.setStyleSheet("color: #FFAB00; font-size: 12px;")
+            lbl.setStyleSheet("color: #E65100; font-size: 12px;")
             return lbl
         elif self._task.status == TaskStatus.COMPLETED:
             lbl = QLabel(f"共 {self._task.total_reviews} 条评论")
-            lbl.setStyleSheet("color: #00E676; font-size: 12px;")
+            lbl.setStyleSheet("color: #00A844; font-size: 12px;")
             return lbl
         elif self._task.status == TaskStatus.ERROR:
             lbl = QLabel("运行出错，详见日志")
-            lbl.setStyleSheet("color: #FF5252; font-size: 12px;")
+            lbl.setStyleSheet("color: #C62828; font-size: 12px;")
             return lbl
         return None
 

@@ -3,15 +3,15 @@
 
 功能说明：
     - 去哪儿网旅游景点评论页面的适配规则
-    - 去哪儿评论通过 JSON API 获取
-    - 定义 URL 结构、请求参数、字段映射
+    - 通过 HTML 页面解析获取评论
+    - 定义 URL 结构、字段映射
 
 使用说明：
-    去哪儿景点评论 API 模板：
-    https://travel.qunar.com/api/comment/{poi_id}/list
+    去哪儿景点评论页面需要有效的登录 Cookie，
+    评论数据渲染在 HTML DOM 中直接提取。
 """
 
-from src.sites.base import SiteAdapter, RequestType, HttpMethod
+from src.sites.base import SiteAdapter, HttpMethod
 
 
 def create_qunar_adapter() -> SiteAdapter:
@@ -26,14 +26,8 @@ def create_qunar_adapter() -> SiteAdapter:
         site_display_name="去哪儿",
         domain=".qunar.com",
         login_url="https://user.qunar.com/",
-        request_type=RequestType.JSON_API,
+        url_template="https://travel.qunar.com/p-oi{id}.html",
         http_method=HttpMethod.GET,
-        api_endpoint="https://travel.qunar.com/api/comment/{poi_id}/list",
-        api_params_template={
-            "page": "{page}",
-            "pageSize": 20,
-            "sort": "1",
-        },
         page_size=20,
         page_start=1,
         max_pages_limit=100,
@@ -50,6 +44,4 @@ def create_qunar_adapter() -> SiteAdapter:
             "location": "ip_location",
             "imgList": "image_urls",
         },
-        reviews_json_path="data.list",
-        total_count_json_path="data.totalCount",
     )

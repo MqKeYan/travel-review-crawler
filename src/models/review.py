@@ -30,7 +30,7 @@ STANDARD_FIELDS = [
     ("sub_scores", "子评分"),
     ("merchant_reply", "商家回复"),
     ("ip_location", "IP 属地"),
-    ("image_urls", "图片链接"),
+    ("image_urls", "图片（本地路径）"),
 ]
 
 # 标准评论对象的默认空值模板

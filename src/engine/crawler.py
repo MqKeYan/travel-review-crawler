@@ -29,9 +29,9 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from src.engine.ua_spoofer import get_random_headers, get_headers_for_api
+from src.engine.ua_spoofer import get_random_headers
 from src.engine.cookie_manager import load_cookies_from_file
-from src.sites.base import SiteAdapter, RequestType, parse_response, _get_nested_value, extract_resource_id
+from src.sites.base import SiteAdapter, parse_response, extract_resource_id
 from src.utils.exceptions import (
     NetworkError,
     ParseError,
@@ -61,15 +61,16 @@ LOGIN_REDIRECT_KEYWORDS = [
 ]
 
 
-def _create_session(cookie_file: str | None = None) -> requests.Session:
+def _create_session(cookie_file: str | None = None, site: str = "") -> requests.Session:
     """
     创建并配置 requests.Session。
 
     为 Session 配置连接池、重试策略，并可选注入 Cookie。
 
     Args:
-        cookie_file: Cookie 文件名（如 "ctrip.json"），
+        cookie_file: Cookie 文件名（不含路径，如 "my_account"），
                      None 或空字符串表示不注入 Cookie
+        site: 平台标识（如 "ctrip"），用于定位 Cookie 存放目录
 
     Returns:
         配置好的 Session 实例
@@ -92,10 +93,10 @@ def _create_session(cookie_file: str | None = None) -> requests.Session:
     session.mount("http://", adapter)
 
     # 注入 Cookie
-    if cookie_file:
-        # 从文件名提取网站标识（如 "ctrip.json" → "ctrip"）
-        site = cookie_file.replace(".json", "")
-        cookies = load_cookies_from_file(site)
+    if cookie_file and site:
+        # cookie_file 为纯文件名（不含 .json），site 为平台标识
+        cookie_name = cookie_file.replace(".json", "")
+        cookies = load_cookies_from_file(site, cookie_name)
         if cookies:
             for c in cookies:
                 session.cookies.set(
@@ -187,26 +188,18 @@ def _make_request(
     """
     发送单次 HTTP 请求。
 
-    根据适配器的 http_method 和 request_type 自动选择 GET/POST 和请求头类型。
-
     Args:
         session: 已配置的 requests.Session
         adapter: 网站适配器
-        page_num: 当前页码（用于填充 URL 模板）
-        referer: Referer 请求头（模拟来源页面）
-        extra_headers: 额外的请求头（覆盖默认值）
+        page_num: 当前页码
+        referer: Referer 请求头
+        extra_headers: 额外的请求头
+        target_url: 目标页面 URL
 
     Returns:
         HTTP 响应对象
-
-    Raises:
-        requests.RequestException: 网络请求失败
     """
-    # 根据请求类型选择不同的请求头
-    if adapter.request_type == RequestType.JSON_API:
-        headers = get_headers_for_api()
-    else:
-        headers = get_random_headers()
+    headers = get_random_headers()
 
     if referer:
         headers["Referer"] = referer
@@ -214,63 +207,17 @@ def _make_request(
     if extra_headers:
         headers.update(extra_headers)
 
-    # 构建请求 URL 和参数
-    url = adapter.api_endpoint or target_url or ""
+    url = target_url or ""
 
-    params = {}
-    data = None
-
-    # 从目标 URL 提取资源 ID（如携程的 viewid 和 resourceId）
-    resource_id = extract_resource_id(target_url) if target_url else None
-
-    # 填充分页参数模板
-    if adapter.http_method.name == "GET":
-        params = _fill_page_param(adapter.api_params_template, page_num, viewid=resource_id, resourceId=resource_id)
-    else:
-        # POST 请求时，body 模板中填充页码和资源 ID
-        body = _fill_page_param(adapter.api_body_template, page_num, viewid=resource_id, resourceId=resource_id)
-        if body:
-            data = body
-
-    # 发送请求
     response = session.request(
         method=adapter.http_method.name,
         url=url,
-        params=params if params else None,
-        json=data if data and adapter.request_type == RequestType.JSON_API else None,
-        data=data if data and adapter.request_type == RequestType.HTML else None,
         headers=headers,
         timeout=DEFAULT_TIMEOUT,
         allow_redirects=True,
     )
 
     return response
-
-
-def _fill_page_param(template: dict, page_num: int, **context) -> dict:
-    """
-    填充请求参数模板中的占位符。
-
-    支持 {page} 页码和 {viewid} 等自定义占位符。
-
-    Args:
-        template: 参数模板字典，如 {"page": "{page}", "pageSize": 20}
-        page_num: 实际页码
-        **context: 额外替换上下文，如 viewid="521"
-
-    Returns:
-        填充后的参数字典
-    """
-    result = {}
-    for key, value in template.items():
-        if isinstance(value, str):
-            if "{page}" in value:
-                value = value.replace("{page}", str(page_num))
-            for k, v in context.items():
-                if v is not None and "{" + k + "}" in value:
-                    value = value.replace("{" + k + "}", str(v))
-        result[key] = value
-    return result
 
 
 def _wait_with_adaptive_delay(consecutive_errors: int) -> None:
@@ -423,6 +370,7 @@ def crawl_all_pages(
                 timeout=600,
                 stop_check=stop_check,
                 progress_callback=progress_callback,
+                cookie_file=cookie_file,
             )
         except Exception as e:
             logger.error(f"Selenium 翻页失败: {e}")
@@ -435,7 +383,7 @@ def crawl_all_pages(
         return all_reviews
 
     # ---- 常规 requests 翻页模式 ----
-    session = _create_session(cookie_file)
+    session = _create_session(cookie_file, site=adapter.site_name)
     all_reviews: list[dict] = []
     consecutive_errors = 0
 

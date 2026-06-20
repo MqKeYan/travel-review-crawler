@@ -18,7 +18,7 @@ import json
 import datetime
 import logging
 
-from src.utils.paths import get_cookies_dir
+from src.utils.paths import get_cookies_dir, get_cookie_platform_dir
 from src.utils.exceptions import CookieExtractError
 
 logger = logging.getLogger("tour-crawler.cookie_manager")
@@ -27,7 +27,7 @@ logger = logging.getLogger("tour-crawler.cookie_manager")
 # ==================== Selenium 驱动浏览器提取 Cookie ====================
 
 # 指示登录成功的 Cookie 名称关键词（任意一个出现即视为已登录）
-_LOGIN_COOKIE_NAMES = {"cticket", "login_uid", "S_token", "token", "sid"}
+_LOGIN_COOKIE_NAMES = {"cticket", "login_uid", "S_token", "token", "sid", "dper", "unb"}
 _LOGIN_WAIT_TIMEOUT = 600  # 登录等待超时（秒）
 
 # 按优先级排列的浏览器驱动列表
@@ -140,21 +140,16 @@ def open_browser_wait_for_login_auto(
                 cookies = _selenium_driver.get_cookies()
                 cookie_names = {c["name"] for c in cookies}
 
-                # 检测1：出现登录态 Cookie
-                if cookie_names & _LOGIN_COOKIE_NAMES:
+                # 检测：URL 离开登录页 且 出现登录态 Cookie（双重条件防误判）
+                current_base = current_url.split("?")[0].split("#")[0]
+                url_left_login = login_page_base not in current_base and current_base != login_page_base
+                has_login_cookie = bool(cookie_names & _LOGIN_COOKIE_NAMES)
+
+                if url_left_login and has_login_cookie:
                     login_detected = True
                     if status_callback:
                         status_callback("检测到登录成功，正在提取 Cookie...")
                     break
-
-                # 检测2：URL 离开了登录页
-                current_base = current_url.split("?")[0].split("#")[0]
-                if login_page_base not in current_base and current_base != login_page_base:
-                    if cookie_names & _LOGIN_COOKIE_NAMES:
-                        login_detected = True
-                        if status_callback:
-                            status_callback("检测到登录成功，正在提取 Cookie...")
-                        break
 
             except Exception:
                 break
@@ -189,14 +184,16 @@ def open_browser_wait_for_login_auto(
 # ==================== Cookie 文件存取 ====================
 
 
-def save_cookies_to_file(site: str, cookies: list[dict], browser_name: str) -> str:
+def save_cookies_to_file(platform: str, cookie_name: str, cookies: list[dict], browser_name: str) -> str:
     """
-    将 Cookie 列表保存到运行目录下的 cookies/ 目录。
+    将 Cookie 列表保存到运行目录下对应平台的子文件夹中。
 
-    文件格式：JSON，包含网站名、创建时间、来源浏览器、Cookie 列表。
+    文件格式：JSON，包含平台名、创建时间、来源浏览器、Cookie 列表。
+    存储路径：cookies/{platform}/{cookie_name}.json
 
     Args:
-        site: 网站标识（如 "ctrip"、"meituan"）
+        platform: 平台标识（如 "ctrip"、"dianping"）
+        cookie_name: Cookie 文件名称（用户自定义）
         cookies: Cookie 字典列表
         browser_name: 来源浏览器名称
 
@@ -204,32 +201,43 @@ def save_cookies_to_file(site: str, cookies: list[dict], browser_name: str) -> s
         保存的文件完整路径
     """
     data = {
-        "site": site,
+        "platform": platform,
+        "cookie_name": cookie_name,
         "created_at": datetime.datetime.now().isoformat(),
         "source_browser": browser_name,
         "cookies": cookies,
     }
 
-    filepath = os.path.join(get_cookies_dir(), f"{site}.json")
+    platform_dir = get_cookie_platform_dir(platform)
+    filepath = os.path.join(platform_dir, f"{cookie_name}.json")
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
     return filepath
 
 
-def load_cookies_from_file(site: str) -> list[dict] | None:
+def load_cookies_from_file(platform: str, cookie_name: str) -> list[dict] | None:
     """
     从运行目录读取已保存的 Cookie 文件。
 
+    优先从平台子目录读取，若不存在则回退到旧版根目录格式。
+
     Args:
-        site: 网站标识（如 "ctrip"）
+        platform: 平台标识（如 "ctrip"）
+        cookie_name: Cookie 文件名称
 
     Returns:
         Cookie 列表，如果文件不存在则返回 None
     """
-    filepath = os.path.join(get_cookies_dir(), f"{site}.json")
+    # 优先从平台子目录读取
+    filepath = os.path.join(get_cookie_platform_dir(platform), f"{cookie_name}.json")
     if not os.path.exists(filepath):
-        return None
+        # 回退到旧版根目录格式（向后兼容）
+        legacy_path = os.path.join(get_cookies_dir(), f"{cookie_name}.json")
+        if os.path.exists(legacy_path):
+            filepath = legacy_path
+        else:
+            return None
 
     with open(filepath, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -237,31 +245,75 @@ def load_cookies_from_file(site: str) -> list[dict] | None:
     return data.get("cookies", [])
 
 
-def get_cookie_file_path(site: str) -> str:
+def get_cookie_file_path(platform: str, cookie_name: str) -> str:
     """
-    获取指定网站的 Cookie 文件路径（不论文件是否存在）。
+    获取指定平台和 Cookie 名称对应的文件路径（不论文件是否存在）。
 
     Args:
-        site: 网站标识
+        platform: 平台标识
+        cookie_name: Cookie 文件名称
 
     Returns:
         Cookie 文件完整路径
     """
-    return os.path.join(get_cookies_dir(), f"{site}.json")
+    return os.path.join(get_cookie_platform_dir(platform), f"{cookie_name}.json")
 
 
-def delete_cookie_file(site: str) -> bool:
+def delete_cookie_file(platform: str, cookie_name: str) -> bool:
     """
-    删除指定网站的 Cookie 文件。
+    删除指定平台下的 Cookie 文件。
 
     Args:
-        site: 网站标识
+        platform: 平台标识
+        cookie_name: Cookie 文件名称
 
     Returns:
         True 表示删除成功，False 表示文件不存在
     """
-    filepath = os.path.join(get_cookies_dir(), f"{site}.json")
+    filepath = os.path.join(get_cookie_platform_dir(platform), f"{cookie_name}.json")
     if os.path.exists(filepath):
         os.remove(filepath)
         return True
+    # 也尝试删除旧版根目录格式
+    legacy_path = os.path.join(get_cookies_dir(), f"{cookie_name}.json")
+    if os.path.exists(legacy_path):
+        os.remove(legacy_path)
+        return True
     return False
+
+
+def list_cookies_for_platform(platform: str) -> list[str]:
+    """
+    列出指定平台下所有已保存的 Cookie 文件名称（不含 .json 扩展名）。
+
+    Args:
+        platform: 平台标识
+
+    Returns:
+        Cookie 名称列表，按文件名排序
+    """
+    platform_dir = get_cookie_platform_dir(platform)
+    if not platform_dir.exists():
+        return []
+    files = sorted(platform_dir.glob("*.json"))
+    return [f.stem for f in files]
+
+
+def get_all_platform_cookies() -> dict[str, list[str]]:
+    """
+    获取所有平台的 Cookie 文件列表。
+
+    Returns:
+        字典 {平台标识: [Cookie名称列表]}
+    """
+    result = {}
+    cookies_root = get_cookies_dir()
+    if not cookies_root.exists():
+        return result
+    for item in sorted(cookies_root.iterdir()):
+        if item.is_dir():
+            platform = item.name
+            files = sorted(item.glob("*.json"))
+            if files:
+                result[platform] = [f.stem for f in files]
+    return result

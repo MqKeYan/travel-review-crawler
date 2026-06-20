@@ -94,9 +94,15 @@ class DocxExporter(BaseExporter):
                 row_cells = table.rows[row_idx + 1].cells
                 for col_idx, field in enumerate(field_names):
                     value = review.get(field, "")
-                    if isinstance(value, list):
+
+                    if field == "image_urls" and isinstance(value, list) and value:
+                        # 图片列：逐个嵌入本地图片，链接则显示为文本
+                        self._write_image_cell(row_cells[col_idx], value, doc)
+                    elif isinstance(value, list):
                         value = "; ".join(str(v) for v in value)
-                    row_cells[col_idx].text = str(value)
+                        row_cells[col_idx].text = str(value)
+                    else:
+                        row_cells[col_idx].text = str(value)
 
             # 设置表格列宽（平均分配）
             page_width = doc.sections[0].page_width
@@ -119,3 +125,58 @@ class DocxExporter(BaseExporter):
         """字段名 → 中文表头"""
         field_to_header = {k: v for k, v in STANDARD_FIELDS}
         return [field_to_header.get(f, f) for f in fields]
+
+    def _write_image_cell(self, cell, image_paths: list[str], doc) -> None:
+        """
+        在表格单元格中嵌入图片。
+
+        对于本地存在的图片文件，逐个嵌入到段落中；
+        对于 URL 链接（下载失败的回退），显示为文本链接。
+
+        Args:
+            cell: docx 表格单元格对象
+            image_paths: 图片路径列表（本地路径或 URL）
+            doc: Document 对象
+        """
+        # 清空默认的空段落
+        for p in cell.paragraphs:
+            p.clear()
+
+        for i, path in enumerate(image_paths):
+            if not isinstance(path, str) or not path:
+                continue
+
+            if path.startswith("http"):
+                # URL 回退：显示为可点击文本
+                para = cell.add_paragraph(f"[图片{i+1}链接] {path}")
+                para.style.font.size = Pt(8)
+            elif os.path.isfile(path):
+                try:
+                    self._embed_image_in_paragraph(cell.add_paragraph(), path)
+                except Exception as e:
+                    cell.add_paragraph(f"[图片{i+1}嵌入失败] {os.path.basename(path)}")
+            else:
+                cell.add_paragraph(f"[图片{i+1}缺失] {os.path.basename(path)}")
+
+    def _embed_image_in_paragraph(self, paragraph, image_path: str) -> None:
+        """
+        在段落中嵌入单张图片，自动缩放至合适尺寸。
+
+        Args:
+            paragraph: docx 段落对象
+            image_path: 本地图片文件路径
+        """
+        from docx.shared import Inches, Cm
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+        max_width = Cm(5.5)     # 最大宽度 5.5cm
+        max_height = Cm(4.5)    # 最大高度 4.5cm
+
+        try:
+            run = paragraph.add_run()
+            run.add_picture(image_path, width=max_width, height=max_height)
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        except Exception:
+            # 图片损坏或格式不支持，显示提示
+            para_text = paragraph.add_run(f"[不支持格式] {os.path.basename(image_path)}")
+            para_text.font.size = Pt(8)

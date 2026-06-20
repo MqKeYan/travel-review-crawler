@@ -28,19 +28,21 @@ class StatsCard(QFrame):
         self.setObjectName("taskCard")
 
         layout = QVBoxLayout()
+        layout.setContentsMargins(8, 8, 8, 8)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.setSpacing(4)
+        layout.setSpacing(2)
 
         self._value_label = QLabel(value)
-        self._value_label.setFont(QFont("微软雅黑", 22, QFont.Weight.Bold))
-        self._value_label.setStyleSheet("color: #00C853;")
+        self._value_label.setFont(QFont("微软雅黑", 26, QFont.Weight.Bold))
+        self._value_label.setStyleSheet("color: #00873E;")
         self._value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         lbl = QLabel(label)
-        lbl.setStyleSheet("color: #999999; font-size: 12px;")
+        lbl.setObjectName("statCardTitle")
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         layout.addWidget(self._value_label)
+        layout.addSpacing(2)
         layout.addWidget(lbl)
         self.setLayout(layout)
 
@@ -80,7 +82,8 @@ class DataPage(QWidget):
         header = QHBoxLayout()
 
         title = QLabel("数据查看与导出")
-        title.setFont(QFont("微软雅黑", 20, QFont.Weight.Bold))
+        title.setFont(QFont("微软雅黑", 24, QFont.Weight.Bold))
+        title.setObjectName("pageTitle")
         header.addWidget(title)
         header.addStretch()
 

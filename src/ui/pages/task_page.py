@@ -76,14 +76,14 @@ class TaskPage(QWidget):
     def _setup_ui(self) -> None:
         """初始化任务页面 UI：左右两栏布局"""
         layout = QHBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(4)
 
         # ========== 左栏：任务列表 ==========
         left_panel = QWidget()
         left_panel.setObjectName("listPanel")
-        left_panel.setMinimumWidth(280)
-        left_panel.setMaximumWidth(440)
+        left_panel.setMinimumWidth(320)
+        left_panel.setMaximumWidth(520)
 
         left_layout = QVBoxLayout()
         left_layout.setContentsMargins(8, 8, 8, 8)
@@ -91,7 +91,8 @@ class TaskPage(QWidget):
 
         # 标题
         title = QLabel("任务列表")
-        title.setFont(QFont("微软雅黑", 16, QFont.Weight.Bold))
+        title.setFont(QFont("微软雅黑", 20, QFont.Weight.Bold))
+        title.setObjectName("pageTitle")
         left_layout.addWidget(title)
 
         # 新建任务按钮
@@ -122,13 +123,13 @@ class TaskPage(QWidget):
         # ========== 右栏：任务详情/操作 ==========
         right_panel = QWidget()
         right_layout = QVBoxLayout()
-        right_layout.setContentsMargins(24, 16, 24, 16)
+        right_layout.setContentsMargins(20, 16, 24, 16)
         right_layout.setSpacing(12)
 
         # 使用 QStackedWidget 切换"空状态"和"详情"
         self._stack = QStackedWidget()
 
-        # 空状态页面（纯空白）
+        # 空状态页面
         self._empty_page = QWidget()
         self._stack.addWidget(self._empty_page)
 
@@ -139,7 +140,7 @@ class TaskPage(QWidget):
 
         # 基本信息
         self._detail_info = QLabel("")
-        self._detail_info.setStyleSheet("color: #999999; font-size: 13px;")
+        self._detail_info.setObjectName("taskDetailInfo")
         self._detail_info.setWordWrap(True)
         detail_layout.addWidget(self._detail_info)
 
@@ -207,7 +208,6 @@ class TaskPage(QWidget):
             self._tasks[task.task_name] = task
             card = TaskCard(task)
             card.clicked.connect(self._on_card_clicked)
-            # 插入到 stretch 之前
             self._task_list_layout.insertWidget(
                 self._task_list_layout.count() - 1, card
             )

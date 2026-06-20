@@ -43,8 +43,8 @@ class ProgressBar(QWidget):
         bar_row.addWidget(self._progress_bar, 1)
 
         self._speed_label = QLabel("")
-        self._speed_label.setStyleSheet("color: #FFAB00; font-size: 13px; font-weight: bold;")
-        self._speed_label.setMinimumWidth(100)
+        self._speed_label.setStyleSheet("color: #E65100; font-size: 15px; font-weight: bold;")
+        self._speed_label.setMinimumWidth(110)
         self._speed_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         bar_row.addWidget(self._speed_label)
 
@@ -55,11 +55,11 @@ class ProgressBar(QWidget):
         info_layout.setContentsMargins(0, 0, 0, 0)
 
         self._message_label = QLabel("等待开始...")
-        self._message_label.setStyleSheet("color: #999999; font-size: 12px;")
+        self._message_label.setObjectName("progressMessage")
         self._message_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         self._eta_label = QLabel("")
-        self._eta_label.setStyleSheet("color: #FFAB00; font-size: 13px; font-weight: bold;")
+        self._eta_label.setStyleSheet("color: #E65100; font-size: 13px; font-weight: bold;")
 
         info_layout.addWidget(self._message_label)
         info_layout.addStretch()
@@ -106,7 +106,7 @@ class ProgressBar(QWidget):
         self._progress_bar.setFormat(f"完成 {count} 条")
         self._progress_bar.setStyleSheet("")
         self._message_label.setText("爬取完成")
-        self._message_label.setStyleSheet("color: #00E676; font-size: 12px; font-weight: bold;")
+        self._message_label.setStyleSheet("color: #00A844; font-size: 12px; font-weight: bold;")
         self._speed_label.setText("")
         self._eta_label.setText("")
 
@@ -118,14 +118,14 @@ class ProgressBar(QWidget):
             error_info: 错误描述
         """
         self._message_label.setText(f"错误: {error_info}")
-        self._message_label.setStyleSheet("color: #FF5252; font-size: 12px;")
+        self._message_label.setStyleSheet("color: #C62828; font-size: 12px;")
 
     def reset(self) -> None:
         """重置进度条到初始状态"""
         self._progress_bar.setValue(0)
         self._progress_bar.setFormat("")
         self._message_label.setText("等待开始...")
-        self._message_label.setStyleSheet("color: #999999; font-size: 12px;")
+        self._message_label.setStyleSheet("")
         self._speed_label.setText("")
         self._eta_label.setText("")
         # 重置样式

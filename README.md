@@ -43,12 +43,12 @@
 
 ## 平台支持矩阵
 
-| 平台 | 爬取模式 | 验证码处理 | 备注 |
-|------|----------|-----------|------|
-| 携程 | requests 翻页 | — | 纯 HTTP 请求 |
-| 去哪儿 | requests 翻页 + Selenium 兜底 | — | 混合模式 |
-| 飞猪 | Selenium 滚动加载 | 滑块自动求解 | headless 后台运行 |
-| 大众点评 | Selenium 翻页 | — | CSS+SVG 字体解密 |
+| 平台 | 爬取模式 | 验证码处理 |
+|------|----------|-----------|
+| 携程 | requests（首页）+ Selenium 点击翻页（后续页） | — |
+| 去哪儿 | — | — |
+| 飞猪 | Selenium 滚动加载 | 滑块自动求解 |
+| 大众点评 | — | — |
 
 ## 系统要求
 
@@ -63,7 +63,7 @@
 
 ### 下载 & 运行（普通用户）
 
-1. 从 [Releases](../../releases) 页面下载最新版 `tour-crawler.zip`
+1. 从 [Releases](../../releases) 页面下载最新版 `TravelReviewCrawler-v0.4.1-win10-win11-x64.7z`
 2. 解压到任意目录（**不要放在需要管理员权限的目录**，如 `C:\Program Files`）
 3. 双击 `tour-crawler.exe` 启动
 
@@ -107,7 +107,7 @@ travel-review-crawler/
 │
 ├── src/                                # 源代码根目录
 │   ├── main.py                         # 应用入口，初始化 QApplication、主题、托盘
-│   ├── __init__.py                     # 包版本号 (v0.4.1)
+│   ├── __init__.py                     # 版本号
 │   │
 │   ├── engine/                         # 爬虫核心引擎
 │   │   ├── crawler.py                  # 通用爬虫引擎：分页、重试、UA 伪装、Cookie 注入
@@ -210,8 +210,7 @@ travel-review-crawler/
 
 ## 行为准则
 
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;本项目遵循 **Contributor Covenant Code of Conduct**。
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;我们致力于营造一个开放、友好、互相尊重的社区环境。
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;本项目遵循 **Contributor Covenant Code of Conduct**。我们致力于营造一个开放、友好、互相尊重的社区环境。
 
 ## 许可证
 

@@ -14,12 +14,7 @@
 </p>
 
 <p align="center">
-  Languages:
-  <a href="./README.md"> 简体中文 </a>
-</p>
-
-<p align="center">
-  <strong> 支持携程、去哪儿、飞猪、大众点评四大旅游平台，一键爬取景区评论数据 </strong>
+  <strong> 支持携程、去哪儿、飞猪、大众点评四大旅游平台（目前去哪儿和大众点评还在开发适配中），一键爬取景区评论数据 </strong>
 </p>
 
 ## 简介

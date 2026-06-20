@@ -1,6 +1,4 @@
 # -*- mode: python ; coding: utf-8 -*-
-
-
 a = Analysis(
     ['src\\main.py'],
     pathex=[],

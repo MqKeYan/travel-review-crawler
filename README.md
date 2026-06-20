@@ -85,7 +85,7 @@ python -m PyInstaller tour-crawler.spec
 
 | 暗夜绿（暗色主题） | 晨曦绿（浅色主题） |
 |:---:|:---:|
-| ![暗色主题](screenshots/dark) | ![浅色主题](screenshots/light) |
+| ![暗色主题](Screenshots/dark.png) | ![浅色主题](Screenshots/light.png) |
 
 ## 使用流程
 

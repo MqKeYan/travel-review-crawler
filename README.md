@@ -5,7 +5,7 @@
 </h1>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL3.0-green"></a>
   <a href="#"><img src="https://img.shields.io/badge/Python-3.13-blue"></a>
   <a href="#"><img src="https://img.shields.io/badge/PySide6-6.8+-purple"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey"></a>

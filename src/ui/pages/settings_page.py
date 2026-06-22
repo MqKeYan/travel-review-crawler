@@ -154,12 +154,6 @@ class SettingsPage(QWidget):
         self._proxy_enable_cb = QCheckBox("启用 HTTP/HTTPS 代理")
         proxy_row1.addWidget(self._proxy_enable_cb)
 
-        test_proxy_btn = QPushButton("测试代理")
-        test_proxy_btn.setObjectName("secondaryBtn")
-        test_proxy_btn.setFont(QFont("微软雅黑", 13))
-        test_proxy_btn.clicked.connect(self._on_test_proxy)
-        proxy_row1.addWidget(test_proxy_btn)
-
         self._proxy_status = QLabel("")
         self._proxy_status.setObjectName("settingsStatusHint")
         proxy_row1.addWidget(self._proxy_status)
@@ -174,6 +168,17 @@ class SettingsPage(QWidget):
         self._proxy_https_input.setPlaceholderText("http://127.0.0.1:8080")
         proxy_form.addRow(self._label("HTTPS 代理:"), self._proxy_https_input)
 
+        # 测试代理按钮：底部居中
+        test_row = QHBoxLayout()
+        test_row.addStretch()
+        test_proxy_btn = QPushButton("测试代理")
+        test_proxy_btn.setObjectName("secondaryBtn")
+        test_proxy_btn.setFont(QFont("微软雅黑", 13))
+        test_proxy_btn.clicked.connect(self._on_test_proxy)
+        test_row.addWidget(test_proxy_btn)
+        test_row.addStretch()
+        proxy_form.addRow(test_row)
+
         proxy_group.setLayout(proxy_form)
         layout.addWidget(proxy_group)
 
@@ -185,6 +190,7 @@ class SettingsPage(QWidget):
         self._default_path_input.setPlaceholderText("留空使用默认导出目录")
         browse_btn = QPushButton("浏览...")
         browse_btn.setObjectName("secondaryBtn")
+        browse_btn.setStyleSheet("QPushButton#secondaryBtn { min-height: 0px; padding: 11px 14px; }")
         browse_btn.clicked.connect(self._on_browse_path)
 
         path_layout = QHBoxLayout()

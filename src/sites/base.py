@@ -71,10 +71,6 @@ class SiteAdapter:
         "commentScore": "rating",
         "commentTime": "time",
         "userLevel": "user_level",
-        "likeCount": "likes",
-        "replyCount": "reply_count",
-        "travelType": "travel_type",
-        "merchantReply": "merchant_reply",
         "ipLocation": "ip_location",
         "imageUrls": "image_urls",
     })
@@ -146,10 +142,6 @@ def _extract_item(item) -> dict:
         "content": content,
         "time": "",
         "user_level": "",
-        "likes": 0,
-        "reply_count": 0,
-        "travel_type": "",
-        "merchant_reply": "",
         "ip_location": "",
         "image_urls": [],
     }
@@ -227,10 +219,6 @@ def _apply_field_mapping(item: dict, mapping: dict) -> dict:
         "content": "",
         "time": "",
         "user_level": "",
-        "likes": 0,
-        "reply_count": 0,
-        "travel_type": "",
-        "merchant_reply": "",
         "ip_location": "",
         "image_urls": [],
     }

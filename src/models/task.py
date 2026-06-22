@@ -95,8 +95,7 @@ class ExportConfig:
     formats: list[str] = field(default_factory=lambda: ["xlsx", "csv"])
     save_path: str = ""  # 空值表示使用默认导出目录
     fields: list[str] = field(default_factory=lambda: [
-        "username", "rating", "content", "time",
-        "likes", "reply_count", "travel_type", "merchant_reply"
+        "username", "rating", "content", "time"
     ])
 
 
@@ -281,8 +280,7 @@ class Task:
             formats=export_.get("formats", ["xlsx", "csv"]),
             save_path=export_.get("save_path", ""),
             fields=export_.get("fields", [
-                "username", "rating", "content", "time",
-                "likes", "reply_count", "travel_type", "merchant_reply"
+                "username", "rating", "content", "time"
             ]),
         )
 

@@ -86,7 +86,7 @@ class DataService:
             task_name: 任务名称
             page: 当前页码（从 1 开始）
             size: 每页条数
-            sort_by: 排序字段（"time" / "rating" / "likes"），None 不排序
+            sort_by: 排序字段（"time" / "rating"），None 不排序
             sort_order: 排序方向 "asc" / "desc"
 
         Returns:
@@ -98,7 +98,7 @@ class DataService:
         total = len(reviews)
 
         # 排序
-        if sort_by and sort_by in ("time", "rating", "likes"):
+        if sort_by and sort_by in ("time", "rating"):
             reverse = sort_order == "desc"
             try:
                 reviews.sort(key=lambda r: (r.get(sort_by) or ""), reverse=reverse)

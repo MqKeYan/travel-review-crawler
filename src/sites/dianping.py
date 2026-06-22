@@ -145,33 +145,6 @@ def _extract_review_from_element(item, driver) -> dict:
         except NoSuchElementException:
             pass
 
-        # --- 点赞数 ---
-        try:
-            like_el = item.find_element(By.CSS_SELECTOR, ".praise .count, .like .count, .actions .praise")
-            like_text = like_el.text.strip()
-            m = re.search(r"(\d+)", like_text)
-            if m:
-                review["likes"] = int(m.group(1))
-        except NoSuchElementException:
-            pass
-
-        # --- 回复数 ---
-        try:
-            reply_el = item.find_element(By.CSS_SELECTOR, ".reply .count, .reply-count")
-            reply_text = reply_el.text.strip()
-            m = re.search(r"(\d+)", reply_text)
-            if m:
-                review["reply_count"] = int(m.group(1))
-        except NoSuchElementException:
-            pass
-
-        # --- 商家回复 ---
-        try:
-            reply_el = item.find_element(By.CSS_SELECTOR, ".merchant-reply, .shop-reply, .biz-reply .content")
-            review["merchant_reply"] = reply_el.text.strip()
-        except NoSuchElementException:
-            pass
-
         # --- IP 属地 ---
         try:
             ip_el = item.find_element(By.CSS_SELECTOR, ".address, .ip-location, .ipLocation")
@@ -192,15 +165,6 @@ def _extract_review_from_element(item, driver) -> dict:
                 if src and src.strip():
                     img_urls.append(src.strip())
             review["image_urls"] = img_urls
-        except Exception:
-            pass
-
-        # --- 出游类型 / 评分标签 ---
-        try:
-            tag_els = item.find_elements(By.CSS_SELECTOR, ".review-tags .tag, .comment-tags span")
-            tags = [t.text.strip() for t in tag_els if t.text.strip()]
-            if tags:
-                review["travel_type"] = " | ".join(tags)
         except Exception:
             pass
 

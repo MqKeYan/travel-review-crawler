@@ -62,17 +62,10 @@ def _extract_comment(item: dict) -> dict:
 
     review["content"] = item.get("content", "")
     review["time"] = _parse_publish_time(item.get("publishTime", ""))
-    review["travel_type"] = item.get("touristTypeDisplay") or ""
 
     images = item.get("images") or []
     review["image_urls"] = [img.get("imageSrcUrl", "") for img in images if isinstance(img, dict)]
     review["ip_location"] = item.get("ipLocatedName", "")
-
-    useful = item.get("usefulCount", 0)
-    review["likes"] = int(useful) if useful else 0
-    reply_count = item.get("replyCount", 0)
-    review["reply_count"] = int(reply_count) if reply_count else 0
-    review["merchant_reply"] = item.get("replyContent") or ""
 
     return review
 
@@ -137,13 +130,6 @@ def extract_from_dom(html_text: str) -> list[dict]:
         ip_el = item.select_one(".ipContent")
         if ip_el:
             r["ip_location"] = ip_el.get_text(strip=True).replace("IP属地：", "").replace("IP属地:", "").strip()
-        for tool in item.select(".toolsItem"):
-            if "reportItem" in tool.get("class", []):
-                continue
-            m3 = re.search(r"(\d+)", tool.get_text(strip=True))
-            if m3:
-                r["likes"] = int(m3.group(1))
-                break
         reviews.append(r)
     return reviews
 

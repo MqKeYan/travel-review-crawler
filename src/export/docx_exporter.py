@@ -90,14 +90,17 @@ class DocxExporter(BaseExporter):
                 header_cells[i].text = header
 
             # 数据行
+            image_fields = {"image_urls", "avatar_url"}
+
             for row_idx, review in enumerate(reviews):
                 row_cells = table.rows[row_idx + 1].cells
                 for col_idx, field in enumerate(field_names):
                     value = review.get(field, "")
 
-                    if field == "image_urls" and isinstance(value, list) and value:
-                        # 图片列：逐个嵌入本地图片，链接则显示为文本
-                        self._write_image_cell(row_cells[col_idx], value, doc)
+                    if field in image_fields and value:
+                        # 图片/头像列：内嵌图片到单元格
+                        paths = value if isinstance(value, list) else [value]
+                        self._write_image_cell(row_cells[col_idx], paths, doc)
                     elif isinstance(value, list):
                         value = "; ".join(str(v) for v in value)
                         row_cells[col_idx].text = str(value)

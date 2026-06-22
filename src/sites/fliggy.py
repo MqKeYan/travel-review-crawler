@@ -44,12 +44,9 @@ def extract_fliggy_reviews_from_dom(driver) -> list[dict]:
             review["username"] = item.find_element(By.CSS_SELECTOR, ".pcd-comment-one__nickname").text.strip()
             review["content"] = item.find_element(By.CSS_SELECTOR, ".pcd-comment-one__text").text.strip()
             date_text = item.find_element(By.CSS_SELECTOR, ".pcd-comment-one__date").text.strip()
-            m = re.match(r"(\d{4}-\d{2}-\d{2})\s*(.*)", date_text)
+            m = re.match(r"(\d{4}-\d{2}-\d{2})", date_text)
             if m:
                 review["time"] = m.group(1)
-                review["travel_type"] = m.group(2).strip()
-            else:
-                review["travel_type"] = date_text
             review["avatar_url"] = item.find_element(By.CSS_SELECTOR, ".pcd-comment-one__user-icon").get_attribute("src") or ""
             imgs = item.find_elements(By.CSS_SELECTOR, ".pcd-comment-one__image")
             review["image_urls"] = [img.get_attribute("src") for img in imgs if img.get_attribute("src")]
@@ -115,14 +112,9 @@ def extract_fliggy_reviews(html_text: str) -> list[dict]:
         date_el = item.select_one(".pcd-comment-one__date")
         if date_el:
             date_text = date_el.get_text(strip=True)
-            # 格式通常是 "2024-06-15 已购 儿童票" 或只是票种
-            # 尝试分离日期和票种
-            m = re.match(r"(\d{4}-\d{2}-\d{2})\s*(.*)", date_text)
+            m = re.match(r"(\d{4}-\d{2}-\d{2})", date_text)
             if m:
                 review["time"] = m.group(1)
-                review["travel_type"] = m.group(2).strip()
-            else:
-                review["travel_type"] = date_text
 
         # --- 图片 ---
         img_els = item.select(".pcd-comment-one__image")

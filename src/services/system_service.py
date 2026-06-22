@@ -79,6 +79,14 @@ class SystemService:
         self._start_time = time.time()
         self._settings = copy.deepcopy(DEFAULT_SETTINGS)
         self._load_settings()
+        # 缓存 psutil Process 对象，避免 cpu_percent 每次新建导致始终返回 0
+        self._process = None
+        try:
+            import psutil
+            self._process = psutil.Process()
+            self._process.cpu_percent()  # 首次调用初始化基线
+        except Exception:
+            pass
 
     def _load_settings(self) -> None:
         """从 settings.json 加载设置"""
@@ -128,18 +136,20 @@ class SystemService:
         hours, remainder = divmod(int(elapsed), 3600)
         minutes, seconds = divmod(remainder, 60)
 
-        # Cookie 文件数量
+        # Cookie 文件数量（递归统计平台子目录中的 json 文件）
         try:
             cookies_dir = get_cookies_dir()
-            cookie_count = sum(1 for f in cookies_dir.iterdir() if f.is_file())
+            cookie_count = sum(1 for f in cookies_dir.rglob("*.json") if f.is_file())
         except Exception:
             cookie_count = 0
 
         # 软件实时内存占用 (MB)
         try:
-            import psutil
-            process = psutil.Process()
-            mem_info = process.memory_info()
+            if self._process is None:
+                import psutil
+                self._process = psutil.Process()
+                self._process.cpu_percent()
+            mem_info = self._process.memory_info()
             memory_mb = int(mem_info.rss / (1024 * 1024))
         except Exception:
             memory_mb = 0
@@ -153,9 +163,10 @@ class SystemService:
         except Exception:
             app_disk_mb = 0
 
-        # 软件实时 CPU 占用 (%)
+        # 软件实时 CPU 占用 (%)，除以核心数归一化到与任务管理器一致
         try:
-            cpu_percent = process.cpu_percent(interval=0)
+            import psutil
+            cpu_percent = self._process.cpu_percent() / psutil.cpu_count()
         except Exception:
             cpu_percent = 0.0
 

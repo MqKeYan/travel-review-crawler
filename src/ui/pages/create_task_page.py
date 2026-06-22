@@ -147,9 +147,14 @@ class CreateTaskPage(QWidget):
         self._cookie_label.setStyleSheet("color: #555555; font-size: 14px;")
         self._cookie_btn = QPushButton("获取新 Cookie")
         self._cookie_btn.setObjectName("secondaryBtn")
+        self._cookie_btn.setStyleSheet("QPushButton { min-height: 0px; padding: 10px 14px; }")
         self._cookie_btn.clicked.connect(self._on_get_cookie)
         self._cookie_switch = QComboBox()
         self._cookie_switch.setMinimumWidth(120)
+        self._cookie_switch.setStyleSheet(
+            "QComboBox::drop-down { width: 0px; border: none; }"
+            "QComboBox::down-arrow { width: 0px; height: 0px; }"
+        )
         self._cookie_switch.currentIndexChanged.connect(self._on_cookie_switched)
         cookie_layout.addWidget(QLabel("使用:"))
         cookie_layout.addWidget(self._cookie_switch)

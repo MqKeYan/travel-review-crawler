@@ -18,36 +18,28 @@ from typing import Optional
 # 标准评论对象字段列表（用于导出模块的字段选择）
 STANDARD_FIELDS = [
     ("username", "用户名"),
-    ("rating", "评分"),
-    ("content", "评论内容"),
-    ("time", "评论时间"),
-    ("travel_type", "出游类型"),
-    ("rating_label", "评分标签"),
     ("user_level", "用户等级"),
     ("avatar_url", "用户头像"),
-    ("likes", "点赞数"),
-    ("reply_count", "回复数"),
-    ("sub_scores", "子评分"),
-    ("merchant_reply", "商家回复"),
     ("ip_location", "IP 属地"),
-    ("image_urls", "图片（本地路径）"),
+    ("rating", "评分"),
+    ("rating_label", "评分标签"),
+    ("content", "评论内容"),
+    ("time", "评论时间"),
+    ("sub_scores", "子评分"),
+    ("image_urls", "图片"),
 ]
 
 # 标准评论对象的默认空值模板
 EMPTY_REVIEW = {
     "username": "",
-    "rating": 0,
-    "content": "",
-    "time": "",
-    "travel_type": "",
-    "rating_label": "",
     "user_level": "",
     "avatar_url": "",
-    "likes": 0,
-    "reply_count": 0,
-    "sub_scores": "",
-    "merchant_reply": "",
     "ip_location": "",
+    "rating": 0,
+    "rating_label": "",
+    "content": "",
+    "time": "",
+    "sub_scores": "",
     "image_urls": [],
 }
 

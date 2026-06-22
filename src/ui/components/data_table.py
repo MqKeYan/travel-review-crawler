@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QPushButton, QLabel, QLineEdit, QComboBox, QSpinBox,
     QHeaderView,
 )
-from PySide6.QtCore import Qt, QAbstractTableModel, QSortFilterProxyModel, Signal
+from PySide6.QtCore import Qt, QAbstractTableModel, QSortFilterProxyModel, Signal, QEvent
 from PySide6.QtGui import QFont, QColor
 
 from src.models.review import STANDARD_FIELDS, ReviewList
@@ -123,22 +123,30 @@ class DataTable(QWidget):
         self._search_input.setMinimumWidth(200)
         self._search_input.textChanged.connect(self._on_search)
 
-        self._page_label = QLabel("第 1 页 / 共 0 页")
+        self._page_label = QLabel("第 0 页 / 共 0 页")
         self._page_label.setObjectName("dataTablePageLabel")
 
         self._prev_btn = QPushButton("上一页")
         self._prev_btn.setObjectName("secondaryBtn")
+        self._prev_btn.setStyleSheet("QPushButton { min-height: 0px; padding: 11px 12px; }")
         self._prev_btn.clicked.connect(self._prev_page)
 
         self._next_btn = QPushButton("下一页")
         self._next_btn.setObjectName("secondaryBtn")
+        self._next_btn.setStyleSheet("QPushButton { min-height: 0px; padding: 11px 12px; }")
         self._next_btn.clicked.connect(self._next_page)
 
         self._page_spin = QSpinBox()
-        self._page_spin.setMinimum(1)
-        self._page_spin.setMaximum(1)
-        self._page_spin.setValue(1)
-        self._page_spin.setFixedWidth(60)
+        self._page_spin.setMinimum(0)
+        self._page_spin.setMaximum(0)
+        self._page_spin.setValue(0)
+        self._page_spin.setFixedWidth(80)
+        self._page_spin.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self._page_spin.setStyleSheet(
+            "QSpinBox::up-button { width: 0px; }"
+            "QSpinBox::down-button { width: 0px; }"
+        )
+        self._page_spin.installEventFilter(self)
         self._page_spin.valueChanged.connect(self._go_to_page)
 
         toolbar.addWidget(self._search_input)
@@ -184,8 +192,22 @@ class DataTable(QWidget):
     def _update_page(self) -> None:
         """更新当前页显示"""
         total = len(self._all_reviews)
+
+        if total == 0:
+            # 无数据时页码显示 0
+            self._current_page = 0
+            self._model.update_data([])
+            self._page_spin.setMaximum(0)
+            self._page_spin.setValue(0)
+            self._page_label.setText("第 0 页 / 共 0 页（共 0 条）")
+            self._prev_btn.setEnabled(False)
+            self._next_btn.setEnabled(False)
+            return
+
         total_pages = max(1, (total + self._page_size - 1) // self._page_size)
 
+        if self._current_page < 1:
+            self._current_page = 1
         if self._current_page > total_pages:
             self._current_page = total_pages
 
@@ -194,6 +216,7 @@ class DataTable(QWidget):
         page_data = self._all_reviews[start:end]
 
         self._model.update_data(page_data)
+        self._page_spin.setMinimum(1)
         self._page_spin.setMaximum(total_pages)
         self._page_spin.setValue(self._current_page)
         self._page_label.setText(f"第 {self._current_page} 页 / 共 {total_pages} 页（共 {total} 条）")
@@ -242,13 +265,25 @@ class DataTable(QWidget):
 
     def _next_page(self) -> None:
         """下一页"""
-        total_pages = max(1, (len(self._all_reviews) + self._page_size - 1) // self._page_size)
+        total = len(self._all_reviews)
+        if total == 0:
+            return
+        total_pages = max(1, (total + self._page_size - 1) // self._page_size)
         if self._current_page < total_pages:
             self._current_page += 1
             self._update_page()
 
     def _go_to_page(self, page: int) -> None:
         """跳转到指定页"""
-        if page != self._current_page:
+        if len(self._all_reviews) == 0:
+            return
+        if page > 0 and page != self._current_page:
             self._current_page = page
             self._update_page()
+
+    def eventFilter(self, obj, event):
+        """禁用页码框的鼠标滚轮"""
+        if obj is self._page_spin and event.type() == QEvent.Type.Wheel:
+            event.ignore()
+            return True
+        return super().eventFilter(obj, event)

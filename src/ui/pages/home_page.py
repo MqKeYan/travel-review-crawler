@@ -24,8 +24,8 @@ class SystemInfoBar(QFrame):
         self.setFixedHeight(68)
 
         outer = QVBoxLayout()
-        outer.setContentsMargins(12, 4, 14, 4)
-        outer.setSpacing(2)
+        outer.setContentsMargins(16, 10, 16, 10)
+        outer.setSpacing(6)
 
         self._info_labels: dict[str, QLabel] = {}
 
@@ -216,7 +216,10 @@ class HomePage(QWidget):
 
         # ---- 系统信息栏 ----
         self._system_info_bar = SystemInfoBar()
-        layout.addWidget(self._system_info_bar)
+        bar_container = QHBoxLayout()
+        bar_container.setContentsMargins(8, 0, 8, 0)
+        bar_container.addWidget(self._system_info_bar)
+        layout.addLayout(bar_container)
 
         # ---- 统计卡片 ----
         card_layout = QGridLayout()

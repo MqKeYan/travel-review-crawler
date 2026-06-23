@@ -3,7 +3,6 @@
 PyInstaller 打包配置 — 评价爬虫器 (Tour Crawler)
 
 使用方式：
-    build.bat          ← 一键创建 venv 并打包（推荐）
     pyinstaller tour-crawler.spec   ← 直接打包（通过白名单自动过滤无关库）
 """
 
@@ -42,7 +41,6 @@ certifi_datas = collect_data_files('certifi')
 # 程序化白名单过滤器
 # 原理：扫描当前 Python 环境中所有可导入的顶级模块，
 #       排除不在白名单中的模块，仅保留项目实际依赖。
-# 其他开发者直接运行即可，无需手动清理全局环境。
 # ============================================================
 
 import os

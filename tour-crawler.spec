@@ -69,7 +69,7 @@ a = Analysis(
     ] + selenium_hidden + bs4_hidden + urllib3_hidden + docx_hidden + openpyxl_hidden + fake_ua_hidden,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=['runtime_hook.py'],
+    runtime_hooks=[],
     excludes=['urllib3.contrib.emscripten'],
     noarchive=False,
     optimize=0,

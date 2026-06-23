@@ -9,6 +9,8 @@ PySide6>=6.8.0
 
 # --- 网络请求 ---
 requests>=2.32.0
+urllib3>=2.3.0            # 连接池/重试策略，crawler.py 直接引用
+certifi>=2025.0.0         # SSL 证书，spec 收集数据文件
 
 # --- HTML 解析 ---
 beautifulsoup4>=4.12.0

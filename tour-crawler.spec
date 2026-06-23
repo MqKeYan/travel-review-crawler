@@ -1,6 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
+from PyInstaller.building.datastruct import Tree
 
 # ============================================================
 # 第三方库子模块收集（解决 importlib 动态导入和复杂包结构问题）
@@ -35,13 +36,16 @@ certifi_datas = collect_data_files('certifi')
 # ============================================================
 import PyInstaller.config
 PyInstaller.config.CONF['distpath'] = 'build'
+PyInstaller.config.CONF['workpath'] = 'build/_temp'
+
+import os
+os.makedirs('build/_temp', exist_ok=True)
 
 a = Analysis(
     ['src\\main.py'],
     pathex=[],
     binaries=[],
     datas=[
-        ('src/ui/theme', 'ui/theme'),
         ('src/assets', 'assets'),
     ] + selenium_datas + fake_ua_datas + certifi_datas,
     hiddenimports=[
@@ -66,10 +70,12 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['urllib3.contrib.emscripten'],
     noarchive=False,
     optimize=0,
 )
+# 主题文件（用 Tree + excludes 排除 __pycache__ 和 .pyc）
+a.datas += Tree('src/ui/theme', prefix='ui/theme', excludes=['__pycache__', '*.pyc'])
 pyz = PYZ(a.pure)
 
 exe = EXE(

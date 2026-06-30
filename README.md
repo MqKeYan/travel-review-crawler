@@ -49,15 +49,16 @@
 
 ## 快速开始
 
-### 下载 & 运行（普通用户）
+### 下载 & 运行
 
 1. 从 [Releases](../../releases) 页面下载最新版 `.7z`压缩包
 2. 解压到任意目录（**不要放在需要管理员权限的目录**，如 `C:\Program Files`）
-3. 双击 `tour-crawler.exe` 启动
+3. 注意 `tour-crawler.exe` 需要和 `_internal/` 文件夹在同一目录
+4. 双击运行 `tour-crawler.exe` 文件即可启动软件
 
 > 首次启动会自动创建 `cookies/`、`logs/`、`exports/`、`tasks/` 等运行时文件夹。
 
-### 从源码运行（开发者）
+### 从源码运行
 
 ```bash
 # 环境要求：Python 3.13+
@@ -70,8 +71,7 @@ cd src && python main.py
 ### 打包为 exe
 
 ```bash
-cd travel-review-crawler
-python -m PyInstaller tour-crawler.spec
+PyInstaller tour-crawler.spec
 ```
 
 ## 界面截图

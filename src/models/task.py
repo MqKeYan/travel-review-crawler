@@ -67,7 +67,7 @@ class FilterConfig:
     内容过滤配置：爬取过程中对评论内容的处理规则。
 
     Attributes:
-        remove_images: 是否移除图片标签和链接
+        remove_images: 是否移除图片（清空头像和图片字段，跳过下载）
         remove_emoji: 是否移除 emoji 字符
         skip_pure_emoji: 是否跳过纯 emoji 评论
         sensitive_words: 敏感词黑名单（命中标记或丢弃）

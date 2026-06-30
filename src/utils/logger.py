@@ -143,6 +143,10 @@ def get_logger(name: str = "tour-crawler") -> logging.Logger:
         # 清理旧日志
         _cleanup_old_logs(logs_dir)
 
+        # 抑制第三方库的 HTTP 连接调试噪音
+        logging.getLogger("urllib3").setLevel(logging.WARNING)
+        logging.getLogger("requests").setLevel(logging.WARNING)
+
         # 创建 logger
         _logger = logging.getLogger(name)
         _logger.setLevel(logging.DEBUG)
@@ -160,10 +164,29 @@ def get_logger(name: str = "tour-crawler") -> logging.Logger:
             console_handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT))
             _logger.addHandler(console_handler)
 
+        # 注册 UI LogHandler（将日志推送到系统记录页面）
+        _register_ui_handler()
+
         # 写入启动标记
         _logger.info("===== 软件启动 =====")
 
     return _logger
+
+
+def _register_ui_handler() -> None:
+    """
+    在 logging 根 logger 上注册 UILogHandler。
+
+    通过延迟导入避免循环依赖（log_service 自身也可能打日志）。
+    日志写入磁盘文件后再推送到 UI 缓冲区，互不影响。
+    """
+    try:
+        from src.services.log_service import LogService
+        service = LogService()
+        service.register()
+    except Exception:
+        # 注册失败不影响日志文件写入
+        pass
 
 
 def shutdown_logger() -> None:

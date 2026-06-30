@@ -4,6 +4,7 @@
 功能说明：
     - 移除评论内容中的 HTML <img> 标签
     - 移除评论内容中的图片链接（http...jpg/png/gif 等）
+    - 清空 avatar_url（头像）和 image_urls（图片列表）字段
     - 保留非图片链接的其他文本内容
 
 正则说明：
@@ -30,18 +31,15 @@ class ImageFilter(BaseFilter):
     """
     图片过滤器。
 
-    移除评论中的 HTML 图片标签和纯文本图片链接。
-    只移除图片标记本身，评论的其他文字内容保留。
+    移除评论中的 HTML 图片标签和纯文本图片链接，
+    同时清空头像和图片字段，避免后续下载环节浪费带宽和磁盘。
     """
 
     name: str = "image"
 
     def process(self, review: dict) -> FilterResult:
         """
-        移除评论中的图片标签和图片链接。
-
-        先移除 HTML 的 <img> 标签（如果有），
-        再移除纯文本中的图片 URL。
+        移除评论中的图片标签、图片链接、头像和图片列表。
 
         Args:
             review: 评论字典
@@ -54,11 +52,15 @@ class ImageFilter(BaseFilter):
         # 第一步：移除 HTML <img> 标签
         content = IMG_TAG_PATTERN.sub("", content)
 
-        # 第二步：移除图片 URL（替换为空字符串而不是标记"[图片]"，保持干净）
+        # 第二步：移除图片 URL
         content = IMG_URL_PATTERN.sub("", content)
 
         # 清理多余空格
         content = re.sub(r"\s+", " ", content).strip()
+
+        # 第三步：清空头像和图片字段，防止下载环节浪费资源
+        review["avatar_url"] = ""
+        review["image_urls"] = []
 
         return FilterResult(
             passed=True,

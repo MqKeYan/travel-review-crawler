@@ -108,7 +108,7 @@ class CreateTaskPage(QWidget):
 
         content = QWidget()
         layout = QVBoxLayout()
-        layout.setContentsMargins(24, 16, 24, 16)
+        layout.setContentsMargins(32, 0, 32, 20)
         layout.setSpacing(16)
 
         title = QLabel("新建爬取任务")
@@ -224,7 +224,7 @@ class CreateTaskPage(QWidget):
         filter_layout = QVBoxLayout()
         filter_layout.setSpacing(8)
 
-        self._filter_images_cb = QCheckBox("移除图片标签和链接")
+        self._filter_images_cb = QCheckBox("移除图片")
         self._filter_images_cb.setChecked(False)
         filter_layout.addWidget(self._filter_images_cb)
 
@@ -232,7 +232,7 @@ class CreateTaskPage(QWidget):
         self._filter_emoji_cb.setChecked(False)
         filter_layout.addWidget(self._filter_emoji_cb)
 
-        self._filter_pure_emoji_cb = QCheckBox("跳过纯表情评论（无文字内容）")
+        self._filter_pure_emoji_cb = QCheckBox("跳过纯表情评论")
         self._filter_pure_emoji_cb.setChecked(False)
         filter_layout.addWidget(self._filter_pure_emoji_cb)
 
@@ -284,7 +284,7 @@ class CreateTaskPage(QWidget):
         self._scroll.setWidget(content)
 
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setContentsMargins(0, 25, 0, 0)
         main_layout.addWidget(self._scroll)
         self.setLayout(main_layout)
 
@@ -415,6 +415,18 @@ class CreateTaskPage(QWidget):
                 self._url_input.setFocus()
                 self._url_input.setPlaceholderText("该网站不支持ID输入，请输入完整URL")
                 self._url_input.setStyleSheet("border-color: #FF5252;")
+                return
+
+        # URL 校验（部分网站只支持特定子域名，如携程仅支持 you / vacations）
+        from src.sites import get_site_adapter
+        adapter = get_site_adapter(site)
+        if adapter and adapter.url_validator:
+            is_valid, err_msg = adapter.url_validator(target_url)
+            if not is_valid:
+                self._url_input.setFocus()
+                self._url_input.setStyleSheet("border-color: #FF5252;")
+                from PySide6.QtWidgets import QMessageBox
+                QMessageBox.warning(self, "不支持的网址", err_msg)
                 return
 
         config = TaskConfig(

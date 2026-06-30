@@ -25,6 +25,8 @@ STANDARD_FIELDS = [
     ("rating_label", "评分标签"),
     ("content", "评论内容"),
     ("time", "评论时间"),
+    ("travel_date", "出发日期"),
+    ("tour_type", "出游类型"),
     ("sub_scores", "子评分"),
     ("image_urls", "图片"),
 ]
@@ -39,6 +41,8 @@ EMPTY_REVIEW = {
     "rating_label": "",
     "content": "",
     "time": "",
+    "travel_date": "",
+    "tour_type": "",
     "sub_scores": "",
     "image_urls": [],
 }

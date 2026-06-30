@@ -86,6 +86,9 @@ class SiteAdapter:
     # Selenium 翻页爬虫 (url, max_pages, max_count, timeout, stop_check) -> list[dict]
     # 当 HTML 页面需要 JS 渲染翻页时使用
     selenium_crawler: callable = None
+    # URL 校验器 (url: str) -> (bool, str)
+    # 校验用户输入的 URL 是否被该适配器支持，返回 (是否有效, 错误消息)
+    url_validator: callable = None
 
 
 def parse_response(response, adapter: SiteAdapter) -> list[dict]:

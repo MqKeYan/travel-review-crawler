@@ -222,8 +222,8 @@ class TaskService:
                 logger.warning(f"任务不存在: {task_name}")
                 return None
 
-            if task.status in (TaskStatus.RUNNING, TaskStatus.COMPLETED):
-                logger.warning(f"任务状态不允许启动: {task.status.value}")
+            if task.status == TaskStatus.RUNNING:
+                logger.warning(f"任务正在运行中，无法重复启动: {task.status.value}")
                 return None
 
             # 创建工作线程（不启动，由调用方启动）

@@ -109,6 +109,8 @@ def open_browser_wait_for_login_auto(
     global _selenium_driver
     timeout = timeout or _LOGIN_WAIT_TIMEOUT
 
+    logger.info(f"开始获取 Cookie: domain={domain}, login_url={login_url}")
+
     # 启动浏览器
     _selenium_driver = None
     last_error = None
@@ -117,14 +119,17 @@ def open_browser_wait_for_login_auto(
             driver = _create_browser_driver(browser)
             driver.get(login_url)
             _selenium_driver = driver
+            logger.info(f"已启动 {browser['name']} 浏览器，导航到登录页")
             if status_callback:
                 status_callback(f"已打开 {browser['name']} 浏览器，请在窗口中登录...")
             break
         except Exception as e:
+            logger.warning(f"{browser['name']} 浏览器启动失败: {e}")
             last_error = e
             continue
 
     if _selenium_driver is None:
+        logger.error(f"所有浏览器启动失败: {last_error}")
         raise CookieExtractError(f"所有浏览器启动失败: {last_error}")
 
     # 等待用户登录（轮询检测 Cookie）
@@ -165,10 +170,12 @@ def open_browser_wait_for_login_auto(
                 }
                 for c in selenium_cookies
             ]
+            logger.info(f"登录成功，从浏览器提取 {len(result)} 条 Cookie")
             if status_callback:
                 status_callback(f"提取完成，共 {len(result)} 条 Cookie")
             return result
         else:
+            logger.warning(f"登录等待超时 ({timeout}s)，用户未完成登录")
             if status_callback:
                 status_callback("登录超时或浏览器已关闭")
             return []
@@ -176,6 +183,7 @@ def open_browser_wait_for_login_auto(
     finally:
         try:
             _selenium_driver.quit()
+            logger.info("浏览器已关闭")
         except Exception:
             pass
         _selenium_driver = None
@@ -213,6 +221,7 @@ def save_cookies_to_file(platform: str, cookie_name: str, cookies: list[dict], b
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+    logger.info(f"Cookie 已保存到文件: {platform}/{cookie_name}.json ({len(cookies)} 条, 来源={browser_name})")
     return filepath
 
 
@@ -235,14 +244,18 @@ def load_cookies_from_file(platform: str, cookie_name: str) -> list[dict] | None
         # 回退到旧版根目录格式（向后兼容）
         legacy_path = os.path.join(get_cookies_dir(), f"{cookie_name}.json")
         if os.path.exists(legacy_path):
+            logger.info(f"从旧版目录加载 Cookie: {cookie_name}.json")
             filepath = legacy_path
         else:
+            logger.warning(f"Cookie 文件不存在: {platform}/{cookie_name}.json")
             return None
 
     with open(filepath, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    return data.get("cookies", [])
+    cookies = data.get("cookies", [])
+    logger.info(f"Cookie 已加载: {platform}/{cookie_name}.json ({len(cookies)} 条)")
+    return cookies
 
 
 def get_cookie_file_path(platform: str, cookie_name: str) -> str:
@@ -273,11 +286,13 @@ def delete_cookie_file(platform: str, cookie_name: str) -> bool:
     filepath = os.path.join(get_cookie_platform_dir(platform), f"{cookie_name}.json")
     if os.path.exists(filepath):
         os.remove(filepath)
+        logger.info(f"Cookie 文件已删除: {platform}/{cookie_name}.json")
         return True
     # 也尝试删除旧版根目录格式
     legacy_path = os.path.join(get_cookies_dir(), f"{cookie_name}.json")
     if os.path.exists(legacy_path):
         os.remove(legacy_path)
+        logger.info(f"旧版 Cookie 文件已删除: {cookie_name}.json")
         return True
     return False
 

@@ -39,6 +39,7 @@ from src.ui.pages.task_page import TaskPage
 from src.ui.pages.create_task_page import CreateTaskPage
 from src.ui.pages.data_page import DataPage
 from src.ui.pages.settings_page import SettingsPage
+from src.ui.pages.log_page import LogPage
 from src.ui.components.cookie_dialog import CookieDialog
 from src.services.cookie_service import CookieService
 from src.services.task_service import TaskService
@@ -47,6 +48,7 @@ from src.services.export_service import ExportService
 from src.services.site_service import SiteService
 from src.services.system_service import SystemService
 from src.services.stats_service import StatsService
+from src.services.log_service import LogService
 from src.engine.notifier import Notifier
 from src.utils.logger import shutdown_logger
 from src.utils.paths import get_data_dir
@@ -99,10 +101,10 @@ class MainWindow(QMainWindow):
         self._apply_theme()
         self._connect_signals()
 
-        # ---- 系统信息实时刷新 ----
+        # ---- 系统信息定时刷新 ----
         self._sysinfo_timer = QTimer(self)
         self._sysinfo_timer.timeout.connect(self._refresh_home_system_info)
-        self._sysinfo_timer.start(1000)  # 每秒刷新
+        self._sysinfo_timer.start(1000)  # 每秒刷新，运行时间实时显示
         self._refresh_home_system_info()  # 立即填充初始值
 
         # ---- 窗口恢复 ----
@@ -150,12 +152,15 @@ class MainWindow(QMainWindow):
         self._data_page.setMinimumWidth(600)
         self._settings_page = SettingsPage()
         self._settings_page.setMinimumWidth(600)
+        self._log_page = LogPage()
+        self._log_page.setMinimumWidth(600)
 
-        # 添加到栈（索引顺序对应侧边栏按钮：0=首页,1=任务,2=数据,3=设置）
+        # 添加到栈（索引顺序对应侧边栏按钮：0=首页,1=任务,2=数据,3=设置,4=记录）
         self._stack.addWidget(self._home_page)       # 0
         self._stack.addWidget(self._task_page)       # 1
         self._stack.addWidget(self._data_page)       # 2
         self._stack.addWidget(self._settings_page)   # 3
+        self._stack.addWidget(self._log_page)        # 4
 
         # 组装主布局：侧边栏固定宽度 + 内容区弹性填满
         main_layout.addWidget(self._sidebar)
@@ -331,10 +336,10 @@ class MainWindow(QMainWindow):
         if self._stack.indexOf(self._create_task_page) != -1:
             self._stack.removeWidget(self._create_task_page)
 
-        # 跳转到目标页面（移除后索引恢复为 0=首页 1=任务 2=数据 3=设置）
+        # 跳转到目标页面（移除后索引恢复为 0=首页 1=任务 2=数据 3=设置 4=记录）
         if page_index < self._stack.count():
-            # 离开任务页时清空选中状态
-            if page_index != 1:
+            # 进入任务页时清空右侧详情面板，确保每次点击"任务管理"都显示空白
+            if page_index == 1:
                 self._task_page.clear_detail()
             self._stack.setCurrentIndex(page_index)
 
@@ -377,9 +382,10 @@ class MainWindow(QMainWindow):
         """任务创建成功"""
         task = self._task_service.create_task(config)
 
-        # 移除新建页面，回到任务列表
+        # 移除新建页面，回到任务列表（右侧详情面板保持空白）
         self._stack.removeWidget(self._create_task_page)
         self._task_page.clear_detail()
+        self._refresh_task_list()
         self._stack.setCurrentIndex(1)
 
         # 刷新任务列表
@@ -407,7 +413,6 @@ class MainWindow(QMainWindow):
             worker.error.connect(
                 lambda msg, tn=task_name: self._on_task_error(tn, msg)
             )
-            worker.log.connect(lambda msg: logger.info(msg))
             worker.start()  # 连接完信号后再启动线程
             self._refresh_task_list()
 

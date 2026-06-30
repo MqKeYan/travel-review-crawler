@@ -97,9 +97,15 @@ class CrawlWorker(QThread):
         self._start_time = time.time()
 
         task_id = self._config.task_name  # 简单起见，用任务名做标识
-        self._log_message(f"任务 [{task_id}] 开始爬取")
+        self._log_message(f"任务 [{task_id}] 开始爬取, 目标网站={self._config.site}, 目标URL={self._config.target_url}")
 
         try:
+            # ---- Cookie 状态 ----
+            if self._config.cookie_file:
+                self._log_message(f"使用 Cookie: {self._config.cookie_file}")
+            else:
+                self._log_message("未配置 Cookie，将无登录态爬取")
+
             # ---- 检查断点 ----
             self._check_resume_point()
             if self._resume_page > 1:
@@ -156,15 +162,33 @@ class CrawlWorker(QThread):
             )
 
             # ---- 下载评论图片到本地 ----
-            # 只有未被停止的任务才下载图片
-            if not self._stopped and self._reviews:
+            # 如果用户勾选了"移除图片"，跳过下载
+            if self._config.filter_config.remove_images:
+                self._log_message("已启用移除图片，跳过图片下载")
+            elif not self._stopped and self._reviews:
                 try:
                     from src.engine.image_downloader import download_images_for_task
+
+                    # 构建下载进度回调，显示"下载图片"而非"正在爬取"
+                    def _download_progress(page_num=None, count=None, total=None, message="", error=None):
+                        if error:
+                            return
+                        reviews_with_images = sum(1 for r in self._reviews if r.get("image_urls"))
+                        progress_data = {
+                            "current": total or 0,
+                            "total": reviews_with_images,
+                            "percentage": int((total or 0) / max(reviews_with_images, 1) * 100),
+                            "current_page": 0,
+                            "message": message or "下载图片中...",
+                            "speed": "",
+                            "eta": "",
+                        }
+                        self.progress.emit(progress_data)
 
                     download_images_for_task(
                         reviews=self._reviews,
                         task_name=self._config.task_name,
-                        progress_callback=None,  # 不阻塞，静默下载
+                        progress_callback=_download_progress,
                     )
                 except Exception as e:
                     logger.warning(f"图片下载出错（评论数据不受影响）: {e}")

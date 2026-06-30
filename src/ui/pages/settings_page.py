@@ -56,7 +56,7 @@ class SettingsPage(QWidget):
 
     def _setup_ui(self) -> None:
         outer_layout = QVBoxLayout()
-        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setContentsMargins(0, 25, 0, 0)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -65,7 +65,7 @@ class SettingsPage(QWidget):
 
         content = QWidget()
         layout = QVBoxLayout()
-        layout.setContentsMargins(24, 16, 24, 16)
+        layout.setContentsMargins(32, 0, 32, 20)
         layout.setSpacing(16)
 
         # ---- 标题 ----
@@ -138,7 +138,9 @@ class SettingsPage(QWidget):
         filter_row.addWidget(self._crawl_filter_pure_emoji)
         filter_row.addWidget(self._crawl_filter_ad)
         filter_row.addStretch()
-        crawl_form.addRow(self._label("默认过滤:"), filter_row)
+        filter_label = QLabel("默认过滤:")
+        filter_label.setStyleSheet("padding: 2px 0px;")  # 与 QCheckBox 自然高度对齐
+        crawl_form.addRow(filter_label, filter_row)
 
         crawl_group.setLayout(crawl_form)
         layout.addWidget(crawl_group)
@@ -336,6 +338,8 @@ class SettingsPage(QWidget):
         return super().eventFilter(obj, event)
 
     def _on_theme_changed(self) -> None:
+        if self._loading:
+            return  # 加载设置时禁止触发主题切换信号，避免重复应用
         theme = self._theme_combo.currentData()
         if theme:
             self.theme_changed.emit(theme)

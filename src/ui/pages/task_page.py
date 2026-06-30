@@ -76,7 +76,7 @@ class TaskPage(QWidget):
     def _setup_ui(self) -> None:
         """初始化任务页面 UI：左右两栏布局"""
         layout = QHBoxLayout()
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(32, 23, 32, 20)
         layout.setSpacing(4)
 
         # ========== 左栏：任务列表 ==========
@@ -86,7 +86,7 @@ class TaskPage(QWidget):
         left_panel.setMaximumWidth(520)
 
         left_layout = QVBoxLayout()
-        left_layout.setContentsMargins(8, 8, 8, 8)
+        left_layout.setContentsMargins(0, 0, 0, 8)
         left_layout.setSpacing(8)
 
         # 标题
@@ -123,7 +123,7 @@ class TaskPage(QWidget):
         # ========== 右栏：任务详情/操作 ==========
         right_panel = QWidget()
         right_layout = QVBoxLayout()
-        right_layout.setContentsMargins(20, 16, 24, 16)
+        right_layout.setContentsMargins(0, 0, 0, 16)
         right_layout.setSpacing(12)
 
         # 使用 QStackedWidget 切换"空状态"和"详情"

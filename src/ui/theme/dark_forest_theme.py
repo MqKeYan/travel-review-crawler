@@ -87,11 +87,6 @@ def get_dark_forest_stylesheet() -> str:
     }
 
     /* ==================== 列表栏 ==================== */
-    #listPanel {
-        background-color: #161916;
-        border-right: 1px solid #1e221e;
-    }
-
     /* ==================== 卡片 ==================== */
     #taskCard {
         background-color: #1f231f;
@@ -288,6 +283,12 @@ def get_dark_forest_stylesheet() -> str:
 
     QTextEdit:focus, QPlainTextEdit:focus {
         border-color: #00C853;
+    }
+
+    /* 日志显示区域 — 紧凑边框 */
+    #logTextEdit {
+        padding: 4px;
+        border-radius: 4px;
     }
 
     /* ==================== 数字输入框 ==================== */
@@ -1006,6 +1007,12 @@ def get_light_stylesheet() -> str:
 
     QTextEdit:focus, QPlainTextEdit:focus {
         border-color: #00A844;
+    }
+
+    /* 日志显示区域 — 紧凑边框 */
+    #logTextEdit {
+        padding: 4px;
+        border-radius: 4px;
     }
 
     /* ==================== 数字输入框 ==================== */

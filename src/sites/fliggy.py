@@ -139,6 +139,138 @@ def extract_fliggy_reviews(html_text: str) -> list[dict]:
     return reviews
 
 
+# ==================== 验证码处理：自动 → 手动弹窗 ====================
+
+
+def _handle_fliggy_captcha(driver, url: str, progress_callback=None):
+    """
+    飞猪验证码统一处理：先自动求解 → 失败则弹出可见浏览器让用户手动过验证。
+
+    自动求解成功时返回原 driver（无需重建）。
+    手动验证完成后会关闭原 headless driver，弹出可见浏览器供用户操作，
+    验证通过后重建 headless driver 并注入 Cookie，返回新 driver。
+    用户可以随时关闭弹窗，检测到验证码消失即视为通过。
+
+    Args:
+        driver: 当前 headless WebDriver
+        url: 目标页面 URL
+        progress_callback: 进度回调
+
+    Returns:
+        (new_driver, ok) — ok=True 表示验证通过，new_driver 为可用 driver
+    """
+    from selenium import webdriver
+    from selenium.webdriver.edge.options import Options
+    from src.engine.captcha_solver import solve_slider_captcha, detect_slider_captcha
+
+    # ---- 第一步：自动求解（最多 3 次） ----
+    for attempt in range(1, 4):
+        if not detect_slider_captcha(driver):
+            return (driver, True)
+        logger.info(f"飞猪: 自动求解验证码 ({attempt}/3)...")
+        if solve_slider_captcha(driver, max_attempts=1):
+            time.sleep(2)
+            if not detect_slider_captcha(driver):
+                logger.info("飞猪: 自动求解成功")
+                return (driver, True)
+
+    # ---- 第二步：弹出可见浏览器，让用户手动过验证 ----
+    logger.info("飞猪: 自动求解失败，弹出浏览器等待用户手动完成验证码")
+    if progress_callback:
+        progress_callback(
+            page_num=0, count=0, total=0,
+            message="自动过验证失败，请在浏览器窗口中手动完成验证码..."
+        )
+
+    # 保存当前 headless driver 的 Cookie 和 URL
+    try:
+        cookies = driver.get_cookies()
+        current_url = driver.current_url or url
+    except Exception:
+        cookies = []
+        current_url = url
+
+    # 关闭 headless driver
+    try:
+        driver.quit()
+    except Exception:
+        pass
+
+    # 打开可见浏览器（和获取 Cookie 时一致，无 --headless）
+    visible_options = Options()
+    visible_options.add_argument("--disable-blink-features=AutomationControlled")
+    visible_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    visible_options.add_experimental_option("useAutomationExtension", False)
+    visible_options.add_argument("--window-size=1920,1080")
+
+    visible_driver = webdriver.Edge(options=visible_options)
+
+    # 注入 Cookie 后导航到当前页面
+    visible_driver.get("https://www.fliggy.com")
+    time.sleep(1)
+    for c in cookies:
+        try:
+            visible_driver.add_cookie(c)
+        except Exception:
+            pass
+    visible_driver.get(current_url)
+    time.sleep(2)
+
+    # 等待用户手动完成验证码（最多 5 分钟）
+    logger.info("飞猪: 等待用户手动完成验证码...")
+    captcha_passed = False
+    for _ in range(150):  # 150 × 2s = 5min
+        time.sleep(2)
+        if not detect_slider_captcha(visible_driver):
+            logger.info("飞猪: 验证码已通过！")
+            captcha_passed = True
+            break
+
+    if captcha_passed:
+        new_cookies = visible_driver.get_cookies()
+        new_url = visible_driver.current_url
+    else:
+        logger.warning("飞猪: 等待手动验证超时（5分钟）")
+        new_cookies = cookies
+        new_url = current_url
+
+    try:
+        visible_driver.quit()
+    except Exception:
+        pass
+
+    # ---- 第三步：重建 headless driver，恢复静默爬取 ----
+    headless_options = Options()
+    headless_options.add_argument("--headless=new")
+    headless_options.add_argument("--disable-blink-features=AutomationControlled")
+    headless_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    headless_options.add_experimental_option("useAutomationExtension", False)
+    headless_options.add_argument("--disable-gpu")
+    headless_options.add_argument("--no-sandbox")
+    headless_options.add_argument("--window-size=1920,1080")
+
+    new_driver = webdriver.Edge(options=headless_options)
+
+    # 注入通过验证后的 Cookie
+    new_driver.get("https://www.fliggy.com")
+    time.sleep(1)
+    for c in new_cookies:
+        try:
+            new_driver.add_cookie(c)
+        except Exception:
+            pass
+    new_driver.get(new_url)
+    time.sleep(2)
+
+    if progress_callback:
+        progress_callback(
+            page_num=0, count=0, total=0,
+            message="验证码已通过，恢复后台爬取..."
+        )
+
+    return (new_driver, captcha_passed)
+
+
 # ==================== Selenium 翻页爬取 ====================
 
 def _dedup_reviews(reviews: list[dict]) -> list[dict]:
@@ -224,24 +356,19 @@ def selenium_crawl_fliggy(
             logger.error("飞猪: 跳转到登录页，请先获取 Cookie")
             return []
 
-        # 验证码检测：自动求解（后台模式最多重试5次）
-        from src.engine.captcha_solver import solve_captcha_with_fallback, detect_slider_captcha
-        captcha_result = solve_captcha_with_fallback(driver, progress_callback)
-        if captcha_result == "manual_needed":
-            logger.warning("飞猪: 后台模式自动求解失败，尝试额外重试...")
-            # 后台模式无法手动操作，增加自动重试
-            from src.engine.captcha_solver import solve_slider_captcha
-            for extra_attempt in range(5):
-                time.sleep(2)
-                if not detect_slider_captcha(driver):
-                    break
-                logger.info(f"飞猪: 后台自动重试验证 ({extra_attempt+1}/5)...")
-                if solve_slider_captcha(driver, max_attempts=1):
-                    break
-            else:
-                if detect_slider_captcha(driver):
-                    logger.error("飞猪: 后台模式无法通过验证码，放弃本次爬取")
-                    return []
+        # 验证码检测：自动求解 → 失败则弹窗手动验证
+        from src.engine.captcha_solver import detect_slider_captcha
+        if detect_slider_captcha(driver):
+            new_driver, ok = _handle_fliggy_captcha(driver, url, progress_callback)
+            if not ok:
+                logger.error("飞猪: 验证码未通过，放弃本次爬取")
+                try:
+                    new_driver.quit()
+                except Exception:
+                    pass
+                return []
+            driver = new_driver
+            wait = WebDriverWait(driver, 20)
             time.sleep(2)
 
         # ---- 步骤1：滚动到评论区域，点击「全部评价」 ----
@@ -292,25 +419,31 @@ def selenium_crawl_fliggy(
             if time.time() - start_time > timeout:
                 break
 
-            # 检测验证码：自动求解（后台模式额外重试）
+            # 检测验证码：自动求解 → 失败则弹窗手动验证
             if detect_slider_captcha(driver):
-                logger.warning("飞猪: 爬取中再次遇到验证码，后台自动求解...")
+                logger.warning("飞猪: 爬取中再次遇到验证码...")
                 if progress_callback:
                     progress_callback(page_num=batch, count=0, total=len(all_reviews),
-                                      message="再次遇到验证码，后台自动求解...")
-                result = solve_captcha_with_fallback(driver, progress_callback)
-                if result == "manual_needed":
-                    from src.engine.captcha_solver import solve_slider_captcha
-                    for extra_attempt in range(5):
-                        time.sleep(2)
-                        if not detect_slider_captcha(driver):
-                            break
-                        if solve_slider_captcha(driver, max_attempts=1):
-                            break
-                    else:
-                        if detect_slider_captcha(driver):
-                            logger.error("飞猪: 后台模式无法通过验证码，终止爬取")
-                            break
+                                      message="再次遇到验证码，正在自动求解...")
+                new_driver, ok = _handle_fliggy_captcha(driver, url, progress_callback)
+                if not ok:
+                    logger.error("飞猪: 验证码未通过，终止爬取")
+                    try:
+                        new_driver.quit()
+                    except Exception:
+                        pass
+                    break
+                driver = new_driver
+                wait = WebDriverWait(driver, 20)
+                # 重新定位滚动容器（driver 已重建）
+                scroll_container = None
+                for sel in (".trip-pc-detail-comments--more-scroll", ".trip-pc-detail-comments-pad__body",
+                             ".trip-pc-detail-comments-pad__wrap"):
+                    try:
+                        scroll_container = driver.find_element(By.CSS_SELECTOR, sel)
+                        break
+                    except NoSuchElementException:
+                        continue
                 time.sleep(2)
                 continue
 

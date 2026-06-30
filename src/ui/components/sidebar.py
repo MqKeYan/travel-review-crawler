@@ -3,7 +3,7 @@
 
 功能说明：
     - 左侧导航侧边栏，带图标的文字按钮
-    - 四个核心页面的切换导航
+    - 五个核心页面的切换导航
     - 当前选中页面高亮显示
 
 页面按钮映射：
@@ -11,6 +11,7 @@
     1: 任务管理
     2: 数据查看
     3: 系统设置
+    4: 系统记录
 """
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QButtonGroup, QSpacerItem, QSizePolicy
@@ -23,7 +24,7 @@ class Sidebar(QWidget):
     暗夜绿风格侧边栏 — 图标+文字导航。
 
     Signal:
-        page_changed(int): 页面切换信号，参数为页面索引 (0~3)
+        page_changed(int): 页面切换信号，参数为页面索引 (0~4)
     """
 
     page_changed = Signal(int)
@@ -34,6 +35,7 @@ class Sidebar(QWidget):
         ("任务管理", "任务"),
         ("数据查看", "数据"),
         ("系统设置", "设置"),
+        ("系统记录", "记录"),
     ]
 
     def __init__(self, parent=None):
@@ -52,6 +54,8 @@ class Sidebar(QWidget):
         self._button_group = QButtonGroup(self)
         self._button_group.setExclusive(True)
 
+        self._buttons: list[QPushButton] = []
+
         for idx, (text, _) in enumerate(self.PAGE_BUTTONS):
             btn = QPushButton(text)
             btn.setCheckable(True)
@@ -61,6 +65,7 @@ class Sidebar(QWidget):
             btn.setToolTip(text)
 
             self._button_group.addButton(btn, idx)
+            self._buttons.append(btn)
             layout.addWidget(btn)
 
         # 弹性占位（让按钮组靠上对齐）
@@ -73,8 +78,10 @@ class Sidebar(QWidget):
         if first_btn:
             first_btn.setChecked(True)
 
-        # 连接信号
-        self._button_group.idClicked.connect(self._on_button_clicked)
+        # 连接信号：用每个按钮的 clicked 信号（非 idClicked）
+        # clicked 在重复点击已选中按钮时也会触发，确保点击"任务管理"能清空详情
+        for idx, btn in enumerate(self._buttons):
+            btn.clicked.connect(lambda checked, i=idx: self.page_changed.emit(i))
 
     def _on_button_clicked(self, button_id: int) -> None:
         """

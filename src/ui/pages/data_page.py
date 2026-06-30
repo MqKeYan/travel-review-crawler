@@ -75,39 +75,49 @@ class DataPage(QWidget):
     def _setup_ui(self) -> None:
         """初始化数据页面 UI"""
         layout = QVBoxLayout()
-        layout.setContentsMargins(24, 16, 24, 16)
+        layout.setContentsMargins(32, 17, 32, 20)
         layout.setSpacing(16)
 
         # ---- 标题行 ----
         header = QHBoxLayout()
-
         title = QLabel("数据查看与导出")
         title.setFont(QFont("微软雅黑", 24, QFont.Weight.Bold))
         title.setObjectName("pageTitle")
         header.addWidget(title)
         header.addStretch()
-
+        selector_label = QLabel("选择任务:")
+        header.addWidget(selector_label)
         self._task_selector = QComboBox()
         self._task_selector.setMinimumWidth(200)
         self._task_selector.setPlaceholderText("选择已完成的任务...")
         self._task_selector.currentIndexChanged.connect(self._on_task_changed)
-        header.addWidget(QLabel("选择任务:"))
         header.addWidget(self._task_selector)
-
         layout.addLayout(header)
 
-        # ---- 统计卡片区 ----
+        # ---- 统计卡片区（固定位置，总长度等于搜索框长度） ----
         stats_layout = QHBoxLayout()
-        stats_layout.setSpacing(12)
+        stats_layout.setSpacing(0)
 
         self._stat_total = StatsCard("总评论数", "0")
         self._stat_avg = StatsCard("平均评分", "-")
         self._stat_range = StatsCard("时间范围", "-")
+        from PySide6.QtWidgets import QSizePolicy
+        # 总评论数、平均评分：固定宽度 120px，位置不变
+        for card in (self._stat_total, self._stat_avg):
+            card.setStyleSheet("#taskCard { margin: 4px 0px; }")
+            card.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            card.setFixedWidth(120)
+        # 时间范围：宽度动态填充至搜索框右边缘，文字较长时可继续向右扩展
+        self._stat_range.setStyleSheet("#taskCard { margin: 4px 0px; }")
+        self._stat_range.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self._stat_range.setMinimumWidth(120)
 
         stats_layout.addWidget(self._stat_total)
+        stats_layout.addSpacing(12)
         stats_layout.addWidget(self._stat_avg)
+        stats_layout.addSpacing(12)
         stats_layout.addWidget(self._stat_range)
-        stats_layout.addStretch()
+        stats_layout.addStretch()  # 匹配搜索框工具栏右侧的 stretch + 翻页控件
 
         layout.addLayout(stats_layout)
 
@@ -194,6 +204,33 @@ class DataPage(QWidget):
         self._stat_avg.update_stats(str(stats.avg_rating))
         date_range = f"{stats.date_range[0] or '-'} ~ {stats.date_range[1] or '-'}"
         self._stat_range.update_stats(date_range)
+
+        # 自动取消全空字段的导出勾选
+        self._auto_deselect_empty_fields(reviews)
+
+    def _auto_deselect_empty_fields(self, reviews: list[dict]) -> None:
+        """
+        扫描所有评论数据，自动取消勾选全列都为空的导出字段。
+
+        只取消勾选（不重新勾选已取消的字段），
+        用户手动调整后不会被覆盖（仅在数据加载时调用一次）。
+        """
+        if not reviews:
+            return
+
+        # 空值判定规则：不同字段类型有不同的"空"定义
+        empty_checks = {
+            "rating": lambda v: v == 0 or v is None,
+            "image_urls": lambda v: not v,  # 空列表
+        }
+
+        for field_key, cb in self._field_checkboxes.items():
+            if not cb.isChecked():
+                continue  # 已手动取消的跳过
+            check = empty_checks.get(field_key, lambda v: not v)
+            all_empty = all(check(r.get(field_key)) for r in reviews)
+            if all_empty:
+                cb.setChecked(False)
 
     def _on_task_changed(self, index: int) -> None:
         """任务选择变化，发出 task_selected 信号"""

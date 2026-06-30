@@ -30,9 +30,32 @@ if _project_root not in sys.path:
 
 from src import __version__ as version
 
+# ---- Windows 任务栏图标（必须在 QApplication 创建之前设置） ----
+# 设置 AppUserModelID 后 Windows 任务栏会使用 exe 内嵌的 ico 图标，
+# 而不是回退到 python.exe 的默认图标
+if sys.platform == "win32":
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("TourCrawler.App")
+    except Exception:
+        pass
+
 # ---- 高 DPI 自适应（必须在 QApplication 创建之前配置） ----
 os.environ.setdefault("QT_AUTO_SCREEN_SCALE_FACTOR", "1")
 os.environ.setdefault("QT_ENABLE_HIGHDPI_SCALING", "1")
+
+# ---- Qt 渲染加速（必须在 QApplication 创建之前配置） ----
+# 启用 Qt 6.4+ RHI Widget 渲染后端，将 widget 绘制从 CPU 光栅引擎
+# 切换到 GPU（Direct3D 11），显著提升 QSS 样式重绘和窗口缩放性能
+os.environ.setdefault("QT_WIDGETS_RHI", "1")
+os.environ.setdefault("QSG_RHI_BACKEND", "d3d11")
+# 强制 Qt 使用硬件加速渲染，避免回退到软件渲染
+os.environ.setdefault("QT_QUICK_BACKEND", "")       # 清空默认值，让 Qt 自动选择最优
+os.environ.setdefault("QSG_RHI_PREFER_SOFTWARE_RENDERER", "0")
+# 确保 Qt 平台插件路径正确（PyInstaller 打包后 qt.conf 可能缺失）
+if getattr(sys, 'frozen', False):
+    plugin_dir = os.path.join(sys._MEIPASS, "PySide6", "Qt6", "plugins")
+    os.environ.setdefault("QT_PLUGIN_PATH", plugin_dir)
 
 
 def setup_high_dpi() -> None:

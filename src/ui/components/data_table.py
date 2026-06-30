@@ -120,7 +120,7 @@ class DataTable(QWidget):
 
         self._search_input = QLineEdit()
         self._search_input.setPlaceholderText("搜索评论内容...")
-        self._search_input.setMinimumWidth(200)
+        self._search_input.setFixedWidth(384)  # 与数据页三卡片总长度对齐
         self._search_input.textChanged.connect(self._on_search)
 
         self._page_label = QLabel("第 0 页 / 共 0 页")
@@ -171,7 +171,7 @@ class DataTable(QWidget):
         self._table_view.setAlternatingRowColors(True)
         self._table_view.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
         self._table_view.setSelectionMode(QTableView.SelectionMode.ExtendedSelection)
-        self._table_view.horizontalHeader().setStretchLastSection(True)
+        self._table_view.horizontalHeader().setStretchLastSection(False)  # 列宽固定，多余空间留白
         self._table_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self._table_view.verticalHeader().setDefaultSectionSize(36)
 

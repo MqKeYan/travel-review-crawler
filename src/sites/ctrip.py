@@ -134,7 +134,221 @@ def extract_from_dom(html_text: str) -> list[dict]:
     return reviews
 
 
-# ==================== Selenium 真翻页爬取 ====================
+# ==================== 旅游页面 DOM 提取（vacations.ctrip.com） ====================
+
+
+def _extract_ip_and_time(vacation_text: str) -> tuple[str, str]:
+    """从 '2026-05-24发表于天津' 中提取 (时间, IP 属地)"""
+    if not vacation_text:
+        return "", ""
+    # 格式: "YYYY-MM-DD发表于地区" 或 "发表于地区" 或 仅有日期
+    m = re.match(r'(\d{4}-\d{2}-\d{2})?.*?发表于(.+)', vacation_text)
+    if m:
+        return (m.group(1) or "", m.group(2).strip())
+    # 回退：仅有日期
+    m2 = re.match(r'(\d{4}-\d{2}-\d{2})', vacation_text)
+    if m2:
+        return (m2.group(1), "")
+    return ("", vacation_text.strip())
+
+
+def extract_from_vacation_dom(html_text: str) -> list[dict]:
+    """从 vacations.ctrip.com 旅游页面的 HTML DOM 提取评论"""
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html_text, "lxml")
+    items = soup.select('.ct-review-list-item')
+    if not items:
+        return []
+
+    reviews = []
+    for item in items:
+        r = EMPTY_REVIEW.copy()
+
+        # 用户名
+        name_el = item.select_one('[data-testid="vac_comment_list_user_info_name"]')
+        if name_el:
+            r["username"] = name_el.get_text(strip=True)
+
+        # 头像
+        avatar_el = item.select_one('.ct-review-person-img')
+        if avatar_el:
+            r["avatar_url"] = avatar_el.get("src", "")
+
+        # 用户等级（图片 URL 含等级信息）
+        level_el = item.select_one('[data-testid="vac_comment_list_user_info_member"] img')
+        if level_el:
+            r["user_level"] = level_el.get("src", "")
+
+        # 总体评分
+        score_el = item.select_one('.ct-review-text-1')
+        if score_el:
+            try:
+                r["rating"] = int(score_el.get_text(strip=True))
+            except (ValueError, TypeError):
+                pass
+
+        # 评分标签（好评/中评/差评）
+        label_el = item.select_one('[data-testid="vac_comment_user_scoreTip"]')
+        if label_el:
+            r["rating_label"] = label_el.get_text(strip=True)
+        else:
+            r["rating_label"] = "好评" if r["rating"] >= 4 else ("中评" if r["rating"] >= 3 else "差评")
+
+        # 子评分（行程安排/酒店体验/司导服务 等）
+        sub_items = item.select('.ct-review-evaluation-label-row-item')
+        if sub_items:
+            parts = []
+            for si in sub_items:
+                name_el = si.select_one('[data-testid="vac_com_detail_subitem_name"]')
+                score_el = si.select_one('[data-testid="vac_com_detail_subitem_score"]')
+                if name_el and score_el:
+                    parts.append(f"{name_el.get_text(strip=True)}:{score_el.get_text(strip=True)}")
+            r["sub_scores"] = " | ".join(parts)
+
+        # 评论正文
+        content_el = item.select_one('[data-testid="vac_comment_detail_main_content_text"]')
+        if content_el:
+            r["content"] = content_el.get_text(strip=True)
+
+        # 图片列表
+        img_els = item.select('[data-testid="vac_comment_attach_img"] img')
+        if img_els:
+            r["image_urls"] = [img.get("src", "") for img in img_els]
+
+        # IP 属地 + 发表日期
+        ip_el = item.select_one('[data-testid="vac_comment_detail_tourtype_ipAttributionName"]')
+        if ip_el:
+            time_str, ip_str = _extract_ip_and_time(ip_el.get_text(strip=True))
+            r["time"] = time_str
+            r["ip_location"] = ip_str
+
+        # 出游类型（家庭亲子/朋友出游 等）
+        tour_el = item.select_one('[data-testid="vac_comment_detail_tourtype_text"]')
+        if tour_el:
+            r["tour_type"] = tour_el.get_text(strip=True)
+
+        # 出发日期
+        extra_texts = item.select('.ct-review-person-info-text')
+        for et in extra_texts:
+            txt = et.get_text(strip=True)
+            if '出发' in txt:
+                r["travel_date"] = txt.replace('出发', '').strip()
+                break
+
+        reviews.append(r)
+
+    return reviews
+
+
+# ==================== 旅游页面 Selenium 翻页爬取 ====================
+
+
+def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
+                                  max_count: int = 0, timeout: int = 300,
+                                  stop_check=None, progress_callback=None,
+                                  cookie_file=None) -> list[dict]:
+    """
+    通过 Selenium 驱动 Edge 浏览器，翻页爬取携程旅游（vacations.ctrip.com）评论。
+
+    与景点爬虫的区别：
+    - 评论容器选择器：.ct-review-list-item（旅游） vs .commentItem（景点）
+    - 翻页按钮选择器：.ct-review-pagination-next（旅游） vs .ant-pagination-next（景点）
+    - 解析函数：extract_from_vacation_dom（旅游） vs extract_from_dom（景点）
+    """
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.edge.options import Options
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.common.exceptions import TimeoutException, NoSuchElementException
+    except ImportError:
+        logger.error("Selenium 未安装，无法翻页爬取")
+        return []
+
+    options = Options()
+    options.add_argument("--headless=new")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
+
+    driver = webdriver.Edge(options=options)
+    all_reviews = []
+    start_time = time.time()
+
+    try:
+        driver.get(url)
+        wait = WebDriverWait(driver, 15)
+
+        for page in range(1, max_pages + 1):
+            if stop_check and stop_check():
+                logger.info("Selenium 翻页被外部停止")
+                break
+
+            if max_count and len(all_reviews) >= max_count:
+                logger.info(f"已达到目标条数 {max_count}，停止翻页")
+                break
+
+            if time.time() - start_time > timeout:
+                logger.warning("翻页超时")
+                break
+
+            # 等待旅游评论容器加载
+            try:
+                wait.until(lambda d: d.find_elements(By.CSS_SELECTOR, '.ct-review-list-item'))
+            except TimeoutException:
+                logger.warning(f"第 {page} 页等待评论加载超时")
+                break
+
+            time.sleep(1)
+
+            # 提取当前页评论
+            html = driver.page_source
+            page_reviews = extract_from_vacation_dom(html)
+
+            before = len(all_reviews)
+            all_reviews.extend(page_reviews)
+            if max_count and len(all_reviews) > max_count:
+                all_reviews = all_reviews[:max_count]
+            all_reviews = _dedup_reviews(all_reviews)
+            new_count = len(all_reviews) - before
+
+            logger.info(f"第 {page} 页: 提取 {len(page_reviews)} 条（新增 {new_count} 条，累计 {len(all_reviews)} 条）")
+
+            if progress_callback:
+                progress_callback(
+                    page_num=page, count=new_count, total=len(all_reviews),
+                    message=f"正在爬取第 {page} 页...（累计 {len(all_reviews)} 条）"
+                )
+
+            if max_count and len(all_reviews) >= max_count:
+                break
+
+            # 判断是否有下一页
+            if page < max_pages:
+                try:
+                    next_btn = driver.find_element(
+                        By.CSS_SELECTOR, '.ct-review-pagination-next:not(.ct-review-pagination-disabled)'
+                    )
+                    driver.execute_script("arguments[0].click();", next_btn)
+                    time.sleep(1.5)
+                except NoSuchElementException:
+                    logger.info("已到末页，翻页结束")
+                    break
+            else:
+                break
+
+    except Exception as e:
+        logger.error(f"Selenium 翻页异常: {e}")
+    finally:
+        try:
+            driver.quit()
+        except Exception:
+            pass
+
+    return all_reviews
+
+
+# ==================== Selenium 真翻页爬取（景点） ====================
 
 
 def _dedup_reviews(reviews: list[dict]) -> list[dict]:
@@ -270,6 +484,60 @@ def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
     return all_reviews
 
 
+# ==================== URL 校验与路由 ====================
+
+
+def _validate_ctrip_url(url: str) -> tuple[bool, str]:
+    """
+    校验携程 URL 是否被支持。
+
+    Returns:
+        (是否有效, 错误消息)
+    """
+    from urllib.parse import urlparse
+    try:
+        host = urlparse(url).netloc.lower()
+    except Exception:
+        return (False, "无法解析 URL")
+
+    if "you.ctrip.com" in host:
+        return (True, "")
+    if "vacations.ctrip.com" in host:
+        return (True, "")
+
+    return (False, "暂不支持该网址，仅支持 you.ctrip.com（景点）和 vacations.ctrip.com（旅游）")
+
+
+def _route_ctrip_crawler(url: str, max_pages: int = 10, max_count: int = 0,
+                         timeout: int = 300, stop_check=None,
+                         progress_callback=None, cookie_file=None) -> list[dict]:
+    """
+    根据 URL 自动分发到景点爬虫或旅游爬虫。
+
+    - vacations.ctrip.com → 旅游爬虫
+    - you.ctrip.com / 其他 → 景点爬虫
+    """
+    from urllib.parse import urlparse
+    try:
+        host = urlparse(url).netloc.lower()
+    except Exception:
+        host = ""
+
+    if "vacations.ctrip.com" in host:
+        return selenium_crawl_ctrip_vacation(
+            url=url, max_pages=max_pages, max_count=max_count,
+            timeout=timeout, stop_check=stop_check,
+            progress_callback=progress_callback, cookie_file=cookie_file,
+        )
+
+    # 默认走景点爬虫（兼容 you.ctrip.com 及所有旧 URL）
+    return selenium_crawl_ctrip(
+        url=url, max_pages=max_pages, max_count=max_count,
+        timeout=timeout, stop_check=stop_check,
+        progress_callback=progress_callback, cookie_file=cookie_file,
+    )
+
+
 # ==================== 适配器入口 ====================
 
 
@@ -288,8 +556,9 @@ def create_ctrip_adapter() -> SiteAdapter:
     """
     创建携程网适配器实例。
 
-    第 1 页快速提取（requests + __NEXT_DATA__），
-    第 2+ 页通过 Selenium 真翻页。
+    支持两种页面类型（根据 URL 自动路由）：
+    - you.ctrip.com  → 景点爬虫（第1页 __NEXT_DATA__ + 翻页 Selenium）
+    - vacations.ctrip.com → 旅游爬虫（Selenium 翻页 + DOM 解析）
 
     Returns:
         配置完成的携程适配器
@@ -307,6 +576,7 @@ def create_ctrip_adapter() -> SiteAdapter:
         review_selector="",
         custom_extractor=None,
         raw_html_parser=extract_reviews_from_html,
-        selenium_crawler=selenium_crawl_ctrip,
+        selenium_crawler=_route_ctrip_crawler,
+        url_validator=_validate_ctrip_url,
         field_mapping={},
     )

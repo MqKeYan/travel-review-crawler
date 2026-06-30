@@ -21,8 +21,17 @@ selenium_datas = collect_data_files('selenium')
 # beautifulsoup4 → bs4
 bs4_hidden = collect_submodules('bs4')
 
+# lxml — HTML/XML 解析（BS4 通过字符串 "lxml" 动态加载 etree/html 子模块）
+lxml_hidden = collect_submodules('lxml')
+
+# requests — HTTP 客户端（内部 adapters/auth/cookies 等动态子模块）
+requests_hidden = collect_submodules('requests')
+
 # urllib3 — requests 底层 HTTP 库，SSL/连接池/重试等子模块
 urllib3_hidden = collect_submodules('urllib3')
+
+# Pillow — 图像处理（PNG/JPEG 等编解码器插件动态加载）
+pil_hidden = collect_submodules('PIL')
 
 # python-docx — Word 文档读写，oxml/enum/shared 等大量内部子模块
 docx_hidden = collect_submodules('docx')
@@ -163,7 +172,7 @@ a = Analysis(
         'concurrent.futures',
         # ---- Windows 多进程支持（freeze_support） ----
         'multiprocessing',
-    ] + selenium_hidden + bs4_hidden + urllib3_hidden + docx_hidden + openpyxl_hidden + fake_ua_hidden,
+    ] + selenium_hidden + bs4_hidden + lxml_hidden + requests_hidden + urllib3_hidden + pil_hidden + docx_hidden + openpyxl_hidden + fake_ua_hidden,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

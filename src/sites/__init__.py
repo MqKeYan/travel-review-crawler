@@ -10,7 +10,6 @@
 
 from src.sites.base import SiteAdapter, HttpMethod
 from src.sites.ctrip import create_ctrip_adapter
-from src.sites.qunar import create_qunar_adapter
 from src.sites.fliggy import create_fliggy_adapter
 from src.sites.dianping import create_dianping_adapter
 
@@ -23,7 +22,6 @@ def _ensure_registry() -> None:
     if not _SITE_REGISTRY:
         _SITE_REGISTRY.update({
             "ctrip": create_ctrip_adapter(),
-            "qunar": create_qunar_adapter(),
             "fliggy": create_fliggy_adapter(),
             "dianping": create_dianping_adapter(),
         })
@@ -34,7 +32,7 @@ def get_site_adapter(site_name: str) -> SiteAdapter | None:
     根据网站标识获取对应的适配器实例。
 
     Args:
-        site_name: 网站标识（"ctrip" / "qunar" / "fliggy" / "dianping"）
+        site_name: 网站标识（"ctrip" / "fliggy" / "dianping"）
 
     Returns:
         网站适配器实例，未找到时返回 None

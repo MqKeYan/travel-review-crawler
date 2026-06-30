@@ -74,7 +74,12 @@ class CookieService:
 
     def load_cookies(self, platform: str, cookie_name: str) -> list[dict] | None:
         """读取已保存的 Cookie 文件"""
-        return load_cookies_from_file(platform, cookie_name)
+        result = load_cookies_from_file(platform, cookie_name)
+        if result:
+            logger.info(f"Cookie 已加载: {platform}/{cookie_name} ({len(result)} 条)")
+        else:
+            logger.warning(f"Cookie 文件不存在或为空: {platform}/{cookie_name}")
+        return result
 
     def get_cookie_path(self, platform: str, cookie_name: str) -> str:
         """获取 Cookie 文件路径"""
@@ -94,7 +99,12 @@ class CookieService:
 
     def delete_cookie(self, platform: str, cookie_name: str) -> bool:
         """删除指定平台的 Cookie 文件"""
-        return delete_cookie_file(platform, cookie_name)
+        result = delete_cookie_file(platform, cookie_name)
+        if result:
+            logger.info(f"Cookie 已删除: {platform}/{cookie_name}")
+        else:
+            logger.warning(f"Cookie 删除失败或不存在: {platform}/{cookie_name}")
+        return result
 
     def clear_all(self) -> int:
         """
@@ -103,6 +113,7 @@ class CookieService:
         Returns:
             删除的文件数量
         """
+        logger.info("开始清空所有 Cookie 文件...")
         cookies_dir = get_cookies_dir()
         count = 0
         try:

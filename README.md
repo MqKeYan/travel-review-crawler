@@ -14,31 +14,28 @@
 </p>
 
 <p align="center">
-  <strong> 支持携程、飞猪等旅游平台（目前去哪儿和大众点评还在开发适配中），一键爬取景区评论数据 </strong>
+  <strong> 支持携程、飞猪等旅游平台（目前大众点评还在开发适配中），一键爬取景区评论数据 </strong>
 </p>
 
 ## 功能概览
 
 | 功能 | 说明 |
 |------|------|
-| 🌐 多平台支持 | 携程、去哪儿、飞猪、大众点评，预设站点适配器 |
+| 🌐 多平台支持 | 携程、飞猪、大众点评，预设站点适配器 |
 | 🍪 Cookie 管理 | 一键拉取系统浏览器（Edge / Chrome / Firefox）的登录 Cookie，按平台分类存储 |
-| 🔐 验证码自动求解 | 基于 PIL/numpy 边缘检测的滑块验证码自动识别，人类轨迹模拟 |
 | 🖼️ 图片下载 | 评论图片多线程下载到本地，DOCX 导出时自动嵌入 |
 | 📤 多格式导出 | TXT · CSV · XLSX · DOCX，支持关键字过滤、图片过滤、纯表情过滤 |
 | 🔔 任务通知 | 桌面弹窗 + 声音提示 + PushPlus 微信推送 |
 | 🎨 双主题 | 暗夜绿（暗色）/ 晨曦绿（亮色）/ 跟随系统，窗口标题栏同步 |
 | 🧵 异步爬取 | QThread + Signal/Slot，爬取不卡 UI，支持暂停/恢复/停止 |
 | ⏸️ 断点续爬 | 任务进度自动保存，重启后可从中断位置继续 |
-| 💻 Windows 专属 | 纯 Windows 10/11 64 位桌面应用，PyInstaller 打包分发 |
 
 ## 平台支持矩阵
 
 | 平台 | 爬取模式 | 验证码处理 |
 |------|----------|-----------|
-| 携程 | requests（首页）+ Selenium 点击翻页（后续页） | — |
-| 飞猪 | Selenium 滚动加载 | 滑块自动求解 |
-| 去哪儿 | — | — |
+| 携程 | requests（首页）+ Selenium 点击翻页（后续页） | 暂未发现需求 |
+| 飞猪 | Selenium 滚动加载 | 滑块自动过 |
 | 大众点评 | — | — |
 
 ## 系统要求
@@ -54,7 +51,7 @@
 
 ### 下载 & 运行（普通用户）
 
-1. 从 [Releases](../../releases) 页面下载最新版 `TravelReviewCrawler-v0.4.1-win10-win11-x64.7z`
+1. 从 [Releases](../../releases) 页面下载最新版 `.7z`压缩包
 2. 解压到任意目录（**不要放在需要管理员权限的目录**，如 `C:\Program Files`）
 3. 双击 `tour-crawler.exe` 启动
 
@@ -179,10 +176,6 @@ travel-review-crawler/
 │   │
 │   └── assets/                         # 静态资源
 │       └── app.ico                     # 软件图标（嵌入 exe + 托盘显示）
-│
-├── tests/                              # 测试套件
-│   ├── test_all_backend.py             # 后端逻辑测试：适配器、过滤器、导出器
-│   └── test_gui_smoke.py               # GUI 冒烟测试
 │
 ├── build/                              # 打包目录
 │   └── dist/tour-crawler/              # PyInstaller 打包最终产物（--onedir 模式）

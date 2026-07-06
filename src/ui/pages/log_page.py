@@ -19,6 +19,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QTextCursor
 
 from src.services.log_service import LogService, LogEntry, LEVEL_NAMES
+from src.ui.theme.dark_forest_theme import LOG_COLORS
 
 
 # 标签页配置：(标识, 标题, 过滤类别, 描述)
@@ -27,16 +28,15 @@ TAB_CONFIG = [
     ("cookie", "Cookie 记录", "cookie", "此页显示 Cookie 获取、保存、加载与删除记录。"),
     ("crawler", "爬虫记录", "crawler", "此页显示爬虫任务运行、验证码求解、图片下载记录。"),
     ("export", "导出记录", "export", "此页显示数据导出任务与文件生成记录。"),
-    ("site", "站点记录", "site", "此页显示各平台站点适配器的请求与解析记录。"),
 ]
 
-# 日志级别 → HTML 显示颜色（暗色主题优化）
-LEVEL_HTML_COLORS = {
-    logging.DEBUG: "#42A5F5",    # 蓝色 — 调试详情（请求参数、解析过程等）
-    logging.INFO: "#00E676",     # 主题绿 — 常规信息
-    logging.WARNING: "#FFB74D",  # 橙色 — 警告
-    logging.ERROR: "#EF5350",    # 红色 — 错误
-    logging.CRITICAL: "#FF1744", # 深红 — 严重错误
+# 日志级别 → HTML 显示颜色，按主题区分
+_LEVEL_COLORS: dict[int, str] = {
+    logging.DEBUG: LOG_COLORS["dark"]["DEBUG"],
+    logging.INFO: LOG_COLORS["dark"]["INFO"],
+    logging.WARNING: LOG_COLORS["dark"]["WARNING"],
+    logging.ERROR: LOG_COLORS["dark"]["ERROR"],
+    logging.CRITICAL: LOG_COLORS["dark"]["CRITICAL"],
 }
 
 # 最多在 UI 中显示的行数（内存缓冲可更大，UI 只显示最近的）
@@ -53,7 +53,7 @@ class _LogTextEdit(QPlainTextEdit):
         super().__init__(parent)
         self.setReadOnly(True)
         self.setMaximumBlockCount(MAX_DISPLAY_LINES)
-        self.setFont(QFont("Consolas", 10))
+        self.setFont(QFont("Consolas", 12))
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setObjectName("logTextEdit")
@@ -69,7 +69,7 @@ class _LogTextEdit(QPlainTextEdit):
 
     def append_colored(self, entry: LogEntry) -> None:
         """追加带颜色的日志行"""
-        color = LEVEL_HTML_COLORS.get(entry.level, "#E0E0E0")
+        color = _LEVEL_COLORS.get(entry.level, "#E0E0E0")
         ts = entry.timestamp.strftime("%Y-%m-%d %H:%M:%S")
         line = f'<span style="color:{color};">[{ts}] {entry.level_name:5s} {entry.message}</span>'
 
@@ -208,6 +208,46 @@ class LogPage(QWidget):
 
     # ==================== 信号连接 ====================
 
+    def set_theme(self, theme: str) -> None:
+        """切换日志颜色主题并刷新显示"""
+        colors = LOG_COLORS.get(theme, LOG_COLORS["dark"])
+        _LEVEL_COLORS[logging.DEBUG] = colors["DEBUG"]
+        _LEVEL_COLORS[logging.INFO] = colors["INFO"]
+        _LEVEL_COLORS[logging.WARNING] = colors["WARNING"]
+        _LEVEL_COLORS[logging.ERROR] = colors["ERROR"]
+        _LEVEL_COLORS[logging.CRITICAL] = colors["CRITICAL"]
+
+        # 更新工具栏复选框颜色
+        cb_colors = {
+            logging.INFO: colors["INFO"],
+            logging.WARNING: colors["WARNING"],
+            logging.ERROR: colors["ERROR"],
+            logging.DEBUG: colors["DEBUG"],
+        }
+        for level, cb in self._level_cbs.items():
+            color = cb_colors.get(level, "#E0E0E0")
+            cb.setStyleSheet(f"QCheckBox {{ color: {color}; }}")
+
+        self._refresh_all_views()
+
+    def _refresh_all_views(self) -> None:
+        """刷新所有标签页视图"""
+        for cat, view in self._log_views.items():
+            view.clear()
+            entries = self._log_service.get_entries(
+                category=cat,
+                levels=self._enabled_levels,
+                keyword=self._keyword,
+            )
+            for entry in entries:
+                view.append_colored(entry)
+
+        # 恢复当前标签页（_refresh_all_views 会清除所有视图，需要把当前页再刷新一遍）
+        # 实际上上面的循环已经处理了当前页，所以只需更新统计
+        self._update_stats()
+
+    # ==================== 信号连接 ====================
+
     def _connect_signals(self) -> None:
         """连接 LogService 信号"""
         self._log_service.entry_added.connect(self._on_entry_added)
@@ -303,8 +343,12 @@ class LogPage(QWidget):
         for e in entries:
             counts[e.level] = counts.get(e.level, 0) + 1
 
-        colors = {logging.ERROR: "#EF5350", logging.WARNING: "#FFB74D",
-                   logging.INFO: "#00E676", logging.DEBUG: "#42A5F5"}
+        colors = {
+            logging.ERROR: _LEVEL_COLORS[logging.ERROR],
+            logging.WARNING: _LEVEL_COLORS[logging.WARNING],
+            logging.INFO: _LEVEL_COLORS[logging.INFO],
+            logging.DEBUG: _LEVEL_COLORS[logging.DEBUG],
+        }
         parts = []
         for level in [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG]:
             c = counts.get(level, 0)

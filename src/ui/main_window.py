@@ -26,7 +26,7 @@ import logging
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QSplitter, QStackedWidget, QSystemTrayIcon, QMenu,
-    QApplication, QMessageBox,
+    QApplication, QMessageBox, QFileDialog,
 )
 from PySide6.QtCore import Qt, QTimer, QUrl, QObject, Signal
 from PySide6.QtGui import QAction
@@ -82,7 +82,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("评价爬虫器")
-        self.setMinimumSize(1280, 720)
+        self.setMinimumSize(1300, 720)
 
         # ---- 初始化服务 ----
         self._site_service = SiteService()
@@ -98,7 +98,8 @@ class MainWindow(QMainWindow):
         self._setup_ui()
         self._setup_tray()
         self._setup_notifications()
-        self._apply_theme()
+        resolved_theme = self._apply_theme()
+        self._log_page.set_theme(resolved_theme)
         self._connect_signals()
 
         # ---- 系统信息定时刷新 ----
@@ -127,11 +128,11 @@ class MainWindow(QMainWindow):
         screen = QApplication.primaryScreen()
         if screen:
             screen_rect = screen.availableGeometry()
-            default_width = int(screen_rect.width() * 0.75)
-            default_height = int(screen_rect.height() * 0.90)
+            default_width = int(screen_rect.width() * 0.80)
+            default_height = int(screen_rect.height() * 0.85)
             self.resize(default_width, default_height)
         else:
-            self.resize(1280, 720)
+            self.resize(1300, 800)
 
         # ===== 第一栏：侧边栏 =====
         self._sidebar = Sidebar()
@@ -226,13 +227,16 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-    def _apply_theme(self, theme: str | None = None) -> None:
+    def _apply_theme(self, theme: str | None = None) -> str:
         """
         应用 QSS 主题 + 窗口标题栏颜色。
 
         Args:
             theme: 主题标识 ("dark" / "light" / "auto")，None 时从设置读取。
                    自动解析 "auto" 为系统实际主题。
+
+        Returns:
+            实际应用的主题标识 ("dark" / "light")
         """
         if theme is None:
             theme = self._system_service.get_theme()
@@ -241,12 +245,17 @@ class MainWindow(QMainWindow):
 
         getter = THEME_STYLESHEETS.get(theme, get_dark_forest_stylesheet)
         stylesheet = getter()
+
+        # 禁用窗口更新，避免逐个 widget 重绘（消除切换闪烁）
+        self.setUpdatesEnabled(False)
         self.setStyleSheet(stylesheet)
+        self.setUpdatesEnabled(True)
 
         # 适配 Windows 标题栏颜色
         self._apply_titlebar_theme(theme)
 
         logger.info(f"主题已切换为: {theme}")
+        return theme
 
     def _apply_titlebar_theme(self, theme: str) -> None:
         """
@@ -729,7 +738,7 @@ class MainWindow(QMainWindow):
         self, task_name: str, formats: list[str],
         fields: list[str] | None = None, only_selected: bool = False,
     ) -> None:
-        """导出请求处理"""
+        """导出请求处理——弹出 Windows 原生保存对话框"""
         page_result = self._data_service.get_reviews(task_name, page=1, size=10000)
         reviews = page_result.items
 
@@ -742,7 +751,26 @@ class MainWindow(QMainWindow):
             selected_rows = self._data_page._data_table.get_selected_rows()
             reviews = selected_rows if selected_rows else reviews
 
-        config = ExportConfig(formats=formats, fields=fields or [])
+        # 构建文件类型过滤器
+        ext_map = {"xlsx": "Excel (*.xlsx)", "csv": "CSV (*.csv)",
+                    "txt": "TXT (*.txt)", "docx": "Word (*.docx)"}
+        fmt_filter = ";;".join(ext_map[f] for f in formats if f in ext_map)
+        default_ext = f".{formats[0]}" if formats else ".xlsx"
+
+        # 弹出 Windows 原生保存对话框（默认定位到导出目录）
+        import time
+        from src.utils.paths import get_exports_dir
+        exports_dir = str(get_exports_dir())
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        default_name = f"{exports_dir}/评论数据_{task_name}_{timestamp}"
+        save_path, _ = QFileDialog.getSaveFileName(
+            self, "导出评论数据", default_name, fmt_filter,
+        )
+
+        if not save_path:
+            return  # 用户取消
+
+        config = ExportConfig(formats=formats, fields=fields or [], save_path=save_path)
 
         worker = self._export_service.export_async(reviews, config)
         if worker:
@@ -763,7 +791,9 @@ class MainWindow(QMainWindow):
 
     def _on_theme_changed(self, theme: str) -> None:
         """实时主题切换（从设置页面下拉框触发）"""
-        self._apply_theme(theme)
+        resolved = self._apply_theme(theme)
+        # 更新日志页面的颜色主题（须用解析后的实际主题，非 "auto"）
+        self._log_page.set_theme(resolved)
         # 立即持久化主题偏好（包括 "auto"）
         self._system_service.set_theme(theme)
 

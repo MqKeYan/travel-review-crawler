@@ -145,21 +145,17 @@ class DocxExporter(BaseExporter):
         for p in cell.paragraphs:
             p.clear()
 
-        for i, path in enumerate(image_paths):
+        for path in image_paths:
             if not isinstance(path, str) or not path:
                 continue
-
             if path.startswith("http"):
-                # URL 回退：显示为可点击文本
-                para = cell.add_paragraph(f"[图片{i+1}链接] {path}")
-                para.style.font.size = Pt(8)
-            elif os.path.isfile(path):
+                # URL 链接不写入，跳过
+                continue
+            if os.path.isfile(path):
                 try:
                     self._embed_image_in_paragraph(cell.add_paragraph(), path)
-                except Exception as e:
-                    cell.add_paragraph(f"[图片{i+1}嵌入失败] {os.path.basename(path)}")
-            else:
-                cell.add_paragraph(f"[图片{i+1}缺失] {os.path.basename(path)}")
+                except Exception:
+                    pass
 
     def _embed_image_in_paragraph(self, paragraph, image_path: str) -> None:
         """

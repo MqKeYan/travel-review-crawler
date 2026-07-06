@@ -20,6 +20,7 @@ import logging
 
 from src.sites.base import SiteAdapter, HttpMethod
 from src.models.review import EMPTY_REVIEW
+from src.utils.image_utils import extract_img_url_from_tag, extract_img_url_from_selenium
 
 logger = logging.getLogger("tour-crawler.sites.fliggy")
 
@@ -49,7 +50,7 @@ def extract_fliggy_reviews_from_dom(driver) -> list[dict]:
                 review["time"] = m.group(1)
             review["avatar_url"] = item.find_element(By.CSS_SELECTOR, ".pcd-comment-one__user-icon").get_attribute("src") or ""
             imgs = item.find_elements(By.CSS_SELECTOR, ".pcd-comment-one__image")
-            review["image_urls"] = [img.get_attribute("src") for img in imgs if img.get_attribute("src")]
+            review["image_urls"] = [extract_img_url_from_selenium(img) for img in imgs]
             reviews.append(review)
         except StaleElementReferenceException:
             continue
@@ -120,18 +121,8 @@ def extract_fliggy_reviews(html_text: str) -> list[dict]:
         img_els = item.select(".pcd-comment-one__image")
         if img_els:
             review["image_urls"] = [
-                img.get("src", "") for img in img_els if img.get("src")
+                extract_img_url_from_tag(img) for img in img_els
             ]
-
-        # --- 子评分（如果有的话，通常在 body 之前）---
-        sub_score_els = item.select("[class*='score'], [class*='rating']")
-        sub_scores = []
-        for el in sub_score_els:
-            txt = el.get_text(strip=True)
-            if txt and len(txt) < 20:
-                sub_scores.append(txt)
-        if sub_scores:
-            review["sub_scores"] = " | ".join(sub_scores)
 
         reviews.append(review)
 
@@ -322,7 +313,6 @@ def selenium_crawl_fliggy(
 
     driver = webdriver.Edge(options=options)
     all_reviews = []
-    start_time = time.time()
     batch = 0
 
     try:
@@ -416,8 +406,9 @@ def selenium_crawl_fliggy(
         while True:
             if stop_check and stop_check():
                 break
-            if time.time() - start_time > timeout:
-                break
+
+            # 单批超时检测
+            batch_start = time.time()
 
             # 检测验证码：自动求解 → 失败则弹窗手动验证
             if detect_slider_captcha(driver):
@@ -481,6 +472,11 @@ def selenium_crawl_fliggy(
                 )
 
             if max_count and len(all_reviews) >= max_count:
+                break
+
+            # 单批超时检测
+            if time.time() - batch_start > timeout:
+                logger.warning(f"第{batch+1}批处理超时（{timeout}秒）")
                 break
 
             # 连续3次无新增且已滚动到底部则停止

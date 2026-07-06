@@ -249,7 +249,7 @@ def selenium_crawl_dianping(
         url: 大众点评商户页面 URL（自动跳转到 review_all）
         max_pages: 最大翻页数
         max_count: 最大条数限制（0 表示不限）
-        timeout: 总超时秒数
+        timeout: 单页超时秒数
         stop_check: 停止检测回调，返回 True 时中断翻页
         progress_callback: 进度回调 (page_num, count, total, message)
 
@@ -279,7 +279,6 @@ def selenium_crawl_dianping(
 
     driver = webdriver.Edge(options=options)
     all_reviews = []
-    start_time = time.time()
 
     # 构建评论列表页 URL
     parsed = urlparse(url)
@@ -317,9 +316,8 @@ def selenium_crawl_dianping(
                 logger.info(f"已达到目标条数 {max_count}，停止翻页")
                 break
 
-            if time.time() - start_time > timeout:
-                logger.warning("翻页超时")
-                break
+            # 单页超时检测
+            page_start = time.time()
 
             # 滚动页面以触发懒加载
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
@@ -349,6 +347,11 @@ def selenium_crawl_dianping(
 
             # 检查是否已达到目标
             if max_count and len(all_reviews) >= max_count:
+                break
+
+            # 单页超时检测
+            if time.time() - page_start > timeout:
+                logger.warning(f"第 {page} 页处理超时（{timeout}秒）")
                 break
 
             # 翻到下一页

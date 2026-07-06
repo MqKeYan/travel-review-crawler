@@ -335,26 +335,40 @@ def crawl_all_pages(
     stop_check=None,
     target_url: str | None = None,
     delay_seconds: float = 2.0,
-) -> list[dict]:
+    filter_chain=None,
+) -> tuple[list[dict], int]:
     """
     爬取指定网站的全部评论数据（多页自动翻页）。
 
     如果适配器设置了 selenium_crawler，则使用 Selenium 翻页爬取。
     否则使用常规的 requests 请求 + 翻页。
 
+    过滤在爬取过程中逐页执行（而非爬完后再统一过滤），
+    进度回调报告的 count/total 均为过滤后通过的数量。
+
     Args:
         adapter: 网站适配器
         cookie_file: Cookie 文件名
         max_pages: 最大翻页数限制，None 表示使用适配器的默认值
-        max_count: 最大条数限制，达到后停止
-        progress_callback: 进度回调函数，接收 (page_num, reviews, total_count) 参数
+        max_count: 最大条数限制（过滤后条数），达到后停止
+        progress_callback: 进度回调函数，接收 (page_num, count, total) 参数
+                           count/total 均为过滤后通过的数量
         stop_check: 停止检测函数，返回 True 时停止爬取
         target_url: 目标页面 URL（用户输入），用作请求 Referer 和 HTML 模式的请求地址
+        filter_chain: 过滤器责任链，None 表示不过滤
 
     Returns:
-        所有爬取的评论数据列表
+        (通过过滤的评论列表, 被过滤掉的条数) 元组
     """
     page_limit = max_pages or adapter.max_pages_limit
+    total_rejected = 0
+
+    def _apply_filters(reviews: list[dict]) -> tuple[list[dict], int]:
+        """对一批评论应用过滤器链，返回 (通过列表, 拒绝条数)"""
+        if filter_chain is None or not reviews:
+            return reviews, 0
+        passed, rejected = filter_chain.apply(reviews)
+        return passed, len(rejected)
 
     # ---- Selenium 翻页模式（需要 JS 渲染的网站） ----
     if adapter.selenium_crawler and target_url and page_limit > 1:
@@ -363,24 +377,46 @@ def crawl_all_pages(
             progress_callback(page_num=1, count=0, total=0, message="启动浏览器...")
 
         try:
-            all_reviews = adapter.selenium_crawler(
-                url=target_url,
-                max_pages=page_limit,
-                max_count=max_count or 0,
-                timeout=600,
-                stop_check=stop_check,
-                progress_callback=progress_callback,
-                cookie_file=cookie_file,
-            )
+            # 尝试传递 filter_chain（携程已支持逐页过滤）
+            try:
+                raw_reviews = adapter.selenium_crawler(
+                    url=target_url,
+                    max_pages=page_limit,
+                    max_count=max_count or 0,
+                    timeout=600,
+                    stop_check=stop_check,
+                    progress_callback=progress_callback,
+                    cookie_file=cookie_file,
+                    filter_chain=filter_chain,
+                )
+            except TypeError:
+                # 旧版 Selenium 爬虫不接受 filter_chain，回退
+                raw_reviews = adapter.selenium_crawler(
+                    url=target_url,
+                    max_pages=page_limit,
+                    max_count=max_count or 0,
+                    timeout=600,
+                    stop_check=stop_check,
+                    progress_callback=progress_callback,
+                    cookie_file=cookie_file,
+                )
         except Exception as e:
             logger.error(f"Selenium 翻页失败: {e}")
-            all_reviews = []
+            raw_reviews = [], 0
 
-        total = len(all_reviews)
+        # 处理返回值：新版返回 (list, int)，旧版返回 list
+        if isinstance(raw_reviews, tuple):
+            passed_reviews, rejected = raw_reviews
+        else:
+            passed_reviews, rejected = _apply_filters(raw_reviews)
+        total_rejected += rejected
+
+        total = len(passed_reviews)
         if progress_callback:
-            progress_callback(page_num=1, count=total, total=total)
-        logger.info(f"Selenium 爬取完成，共 {total} 条")
-        return all_reviews
+            progress_callback(page_num=1, count=total, total=total,
+                            message=f"爬取完成: 通过 {total} 条, 过滤 {total_rejected} 条")
+        logger.info(f"Selenium 爬取完成，共 {total} 条（过滤掉 {total_rejected} 条）")
+        return passed_reviews, total_rejected
 
     # ---- 常规 requests 翻页模式 ----
     session = _create_session(cookie_file, site=adapter.site_name)
@@ -396,40 +432,56 @@ def crawl_all_pages(
             logger.info("爬取任务被外部停止")
             break
 
-        # 检查是否已达到目标条数
+        # 检查是否已达到目标条数（过滤后条数）
         if max_count and len(all_reviews) >= max_count:
             break
 
         try:
-            reviews, has_more = crawl_single_page(
+            raw_reviews, has_more = crawl_single_page(
                 session, adapter, page_num, referer, target_url, stop_check
             )
 
             consecutive_errors = 0  # 成功，重置连续失败计数
 
-            if reviews:
-                all_reviews.extend(reviews)
-                # 达到 max_count 时截断多余数据
+            # ---- 逐页过滤：在爬取过程中立即过滤 ----
+            page_passed_count = 0
+            if raw_reviews:
+                passed, rejected = _apply_filters(raw_reviews)
+                total_rejected += rejected
+                all_reviews.extend(passed)
+                page_passed_count = len(passed)
+
+                # 达到 max_count 时截断多余数据（过滤后条数）
                 if max_count and len(all_reviews) > max_count:
+                    overflow = len(all_reviews) - max_count
+                    total_rejected += overflow  # 溢出的也算被过滤
                     all_reviews = all_reviews[:max_count]
-                logger.info(
-                    f"第 {page_num} 页完成: 解析 {len(reviews)} 条"
-                    f"（累计 {len(all_reviews)} 条）"
-                )
+                    page_passed_count -= overflow
+
+                if filter_chain:
+                    logger.info(
+                        f"第 {page_num} 页完成: 解析 {len(raw_reviews)} 条"
+                        f" → 过滤后 {page_passed_count} 条"
+                        f"（累计通过 {len(all_reviews)} 条, 过滤 {total_rejected} 条）"
+                    )
+                else:
+                    logger.info(
+                        f"第 {page_num} 页完成: 解析 {len(raw_reviews)} 条"
+                        f"（累计 {len(all_reviews)} 条）"
+                    )
 
             # 更新上一个页面的 URL 作为下一页的 Referer
-            # （实际项目中可在 crawl_single_page 中返回当前页 URL）
             referer = target_url
 
-            # 回调进度
+            # 回调进度（count/total 均为过滤后通过的数量）
             if progress_callback:
                 progress_callback(
                     page_num=page_num,
-                    count=len(reviews),
+                    count=page_passed_count,
                     total=len(all_reviews),
                 )
 
-            # 末页判断
+            # 末页判断（基于原始解析条数，不受过滤影响）
             if not has_more:
                 logger.info(f"已到末页（第 {page_num} 页），爬取结束")
                 break
@@ -460,4 +512,4 @@ def crawl_all_pages(
             break
 
     session.close()
-    return all_reviews
+    return all_reviews, total_rejected

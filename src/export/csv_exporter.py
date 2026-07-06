@@ -72,7 +72,6 @@ class CsvExporter(BaseExporter):
                     row = []
                     for field in field_names:
                         value = review.get(field, "")
-                        # 列表类型（如图片链接）转为字符串
                         if isinstance(value, list):
                             value = "; ".join(str(v) for v in value)
                         row.append(value)

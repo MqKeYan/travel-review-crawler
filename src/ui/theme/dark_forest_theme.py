@@ -285,10 +285,24 @@ def get_dark_forest_stylesheet() -> str:
         border-color: #00C853;
     }
 
-    /* 日志显示区域 — 紧凑边框 */
+    /* 日志显示区域 — 左上直角 */
     #logTextEdit {
         padding: 4px;
-        border-radius: 4px;
+        border-top-left-radius: 0px;
+    }
+
+    /* 日志标签页容器 — 无背景框格 */
+    #logTabWidget::pane {
+        background-color: transparent;
+        border: none;
+    }
+
+    /* 日志标签页 — 首尾按钮加圆角 */
+    #logTabWidget QTabBar::tab:first {
+        border-top-left-radius: 8px;
+    }
+    #logTabWidget QTabBar::tab:last {
+        border-top-right-radius: 8px;
     }
 
     /* ==================== 数字输入框 ==================== */
@@ -805,12 +819,6 @@ def get_light_stylesheet() -> str:
         padding: 10px 10px 6px 10px;
     }
 
-    /* ==================== 列表栏 ==================== */
-    #listPanel {
-        background-color: #eeefee;
-        border-right: 1px solid #d5d9d5;
-    }
-
     /* ==================== 卡片 ==================== */
     #taskCard {
         background-color: #ffffff;
@@ -1009,10 +1017,25 @@ def get_light_stylesheet() -> str:
         border-color: #00A844;
     }
 
-    /* 日志显示区域 — 紧凑边框 */
+    /* 日志显示区域 — 左上直角，浅灰底护眼 */
     #logTextEdit {
+        background-color: #ebedeb;
         padding: 4px;
-        border-radius: 4px;
+        border-top-left-radius: 0px;
+    }
+
+    /* 日志标签页容器 — 无背景框格 */
+    #logTabWidget::pane {
+        background-color: transparent;
+        border: none;
+    }
+
+    /* 日志标签页 — 首尾按钮加圆角 */
+    #logTabWidget QTabBar::tab:first {
+        border-top-left-radius: 8px;
+    }
+    #logTabWidget QTabBar::tab:last {
+        border-top-right-radius: 8px;
     }
 
     /* ==================== 数字输入框 ==================== */
@@ -1471,4 +1494,22 @@ THEME_DISPLAY_NAMES = {
     "dark": "暗夜绿 (深色)",
     "light": "晨曦绿 (浅色)",
     "auto": "跟随系统",
+}
+
+# 日志级别颜色：暗色 / 浅色各一套
+LOG_COLORS = {
+    "dark": {
+        "DEBUG": "#42A5F5",
+        "INFO": "#00E676",
+        "WARNING": "#FFB74D",
+        "ERROR": "#EF5350",
+        "CRITICAL": "#FF1744",
+    },
+    "light": {
+        "DEBUG": "#1565C0",
+        "INFO": "#00A844",
+        "WARNING": "#E65100",
+        "ERROR": "#C62828",
+        "CRITICAL": "#6A1B9A",
+    },
 }

@@ -136,6 +136,23 @@ def main() -> int:
     # ---- 全局异常处理 ----
     sys.excepthook = global_exception_handler
 
+    # ---- 屏蔽 Qt 内部已知无害警告 ----
+    from PySide6.QtCore import qInstallMessageHandler, QtMsgType
+
+    _SUPPRESSED_QT_PATTERNS = [
+        "QFont::setPointSize: Point size <= 0",
+    ]
+
+    def _qt_message_handler(msg_type, context, msg):
+        if msg_type == QtMsgType.QtWarningMsg:
+            for pattern in _SUPPRESSED_QT_PATTERNS:
+                if pattern in msg:
+                    return
+        # 默认输出到 stderr（保持 Qt 原始行为）
+        sys.stderr.write(f"{msg}\n")
+
+    qInstallMessageHandler(_qt_message_handler)
+
     # ---- 创建应用 ----
     from PySide6.QtWidgets import QApplication as QA
 

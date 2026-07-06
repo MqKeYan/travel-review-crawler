@@ -27,7 +27,6 @@ STANDARD_FIELDS = [
     ("time", "评论时间"),
     ("travel_date", "出发日期"),
     ("tour_type", "出游类型"),
-    ("sub_scores", "子评分"),
     ("image_urls", "图片"),
 ]
 
@@ -43,7 +42,6 @@ EMPTY_REVIEW = {
     "time": "",
     "travel_date": "",
     "tour_type": "",
-    "sub_scores": "",
     "image_urls": [],
 }
 

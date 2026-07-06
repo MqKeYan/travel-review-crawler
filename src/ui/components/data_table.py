@@ -171,7 +171,7 @@ class DataTable(QWidget):
         self._table_view.setAlternatingRowColors(True)
         self._table_view.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
         self._table_view.setSelectionMode(QTableView.SelectionMode.ExtendedSelection)
-        self._table_view.horizontalHeader().setStretchLastSection(False)  # 列宽固定，多余空间留白
+        self._table_view.horizontalHeader().setStretchLastSection(True)  # 末列拉伸填满，无水平滚动条
         self._table_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self._table_view.verticalHeader().setDefaultSectionSize(36)
 

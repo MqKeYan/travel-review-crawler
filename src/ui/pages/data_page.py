@@ -21,28 +21,27 @@ from src.models.review import STANDARD_FIELDS, ReviewStats
 
 
 class StatsCard(QFrame):
-    """简易统计卡片"""
+    """简易统计卡片（紧凑高度，正文统一字号）"""
 
     def __init__(self, label: str, value: str, parent=None):
         super().__init__(parent)
         self.setObjectName("taskCard")
 
         layout = QVBoxLayout()
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(6, 2, 6, 2)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.setSpacing(2)
+        layout.setSpacing(0)
 
         self._value_label = QLabel(value)
-        self._value_label.setFont(QFont("微软雅黑", 26, QFont.Weight.Bold))
         self._value_label.setStyleSheet("color: #00873E;")
         self._value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         lbl = QLabel(label)
         lbl.setObjectName("statCardTitle")
+        lbl.setStyleSheet("font-size: 15px;")
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         layout.addWidget(self._value_label)
-        layout.addSpacing(2)
         layout.addWidget(lbl)
         self.setLayout(layout)
 
@@ -94,7 +93,12 @@ class DataPage(QWidget):
         header.addWidget(self._task_selector)
         layout.addLayout(header)
 
-        # ---- 统计卡片区（固定位置，总长度等于搜索框长度） ----
+        # ---- 数据内容区 ----
+        content_layout = QVBoxLayout()
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(16)
+
+        # 统计卡片区
         stats_layout = QHBoxLayout()
         stats_layout.setSpacing(0)
 
@@ -102,12 +106,10 @@ class DataPage(QWidget):
         self._stat_avg = StatsCard("平均评分", "-")
         self._stat_range = StatsCard("时间范围", "-")
         from PySide6.QtWidgets import QSizePolicy
-        # 总评论数、平均评分：固定宽度 120px，位置不变
         for card in (self._stat_total, self._stat_avg):
             card.setStyleSheet("#taskCard { margin: 4px 0px; }")
             card.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             card.setFixedWidth(120)
-        # 时间范围：宽度动态填充至搜索框右边缘，文字较长时可继续向右扩展
         self._stat_range.setStyleSheet("#taskCard { margin: 4px 0px; }")
         self._stat_range.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self._stat_range.setMinimumWidth(120)
@@ -117,22 +119,24 @@ class DataPage(QWidget):
         stats_layout.addWidget(self._stat_avg)
         stats_layout.addSpacing(12)
         stats_layout.addWidget(self._stat_range)
-        stats_layout.addStretch()  # 匹配搜索框工具栏右侧的 stretch + 翻页控件
+        stats_layout.addStretch()
+        content_layout.addLayout(stats_layout)
 
-        layout.addLayout(stats_layout)
-
-        # ---- 数据表格 ----
+        # 数据表格
         self._data_table = DataTable()
-        layout.addWidget(self._data_table, 1)
+        content_layout.addWidget(self._data_table, 1)
 
-        # ---- 导出区 ----
+        # 导出区
         export_group = QGroupBox("导出数据")
+        export_group.setStyleSheet(
+            "QGroupBox { padding: 8px; padding-top: 20px; }"
+        )
         export_layout = QVBoxLayout()
-        export_layout.setSpacing(8)
+        export_layout.setSpacing(2)
 
-        # 格式行
+        # 格式行 + 导出按钮
         format_row = QHBoxLayout()
-        format_row.setSpacing(12)
+        format_row.setSpacing(8)
 
         self._export_xlsx_cb = QCheckBox("XLSX")
         self._export_xlsx_cb.setChecked(True)
@@ -142,6 +146,9 @@ class DataPage(QWidget):
         self._export_docx_cb = QCheckBox("DOCX")
 
         self._export_btn = QPushButton("导出选中格式")
+        self._export_btn.setStyleSheet(
+            "min-height: 24px; padding: 6px 16px; font-size: 14px;"
+        )
         self._export_btn.clicked.connect(self._on_export)
 
         format_row.addWidget(QLabel("格式:"))
@@ -151,25 +158,27 @@ class DataPage(QWidget):
         format_row.addWidget(self._export_docx_cb)
         format_row.addStretch()
         format_row.addWidget(self._export_btn)
-
         export_layout.addLayout(format_row)
 
-        # 字段选择行
+        # 导出字段（一行，紧凑排列）
         field_row = QHBoxLayout()
-        field_row.setSpacing(8)
+        field_row.setSpacing(6)
         field_row.addWidget(QLabel("导出字段:"))
+
         self._field_checkboxes: dict[str, QCheckBox] = {}
         for field_key, field_label in STANDARD_FIELDS:
             cb = QCheckBox(field_label)
             cb.setChecked(True)
-            cb.setStyleSheet("font-size: 11px;")
+            cb.setFont(QFont("微软雅黑", 11))
             self._field_checkboxes[field_key] = cb
             field_row.addWidget(cb)
         field_row.addStretch()
         export_layout.addLayout(field_row)
 
         export_group.setLayout(export_layout)
-        layout.addWidget(export_group)
+        content_layout.addWidget(export_group)
+
+        layout.addLayout(content_layout, 1)
 
         self.setLayout(layout)
 

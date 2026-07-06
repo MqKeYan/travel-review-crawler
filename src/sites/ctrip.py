@@ -21,6 +21,7 @@ import logging
 
 from src.sites.base import SiteAdapter, HttpMethod
 from src.models.review import EMPTY_REVIEW
+from src.utils.image_utils import extract_img_url_from_tag
 
 logger = logging.getLogger("tour-crawler.sites.ctrip")
 
@@ -54,11 +55,6 @@ def _extract_comment(item: dict) -> dict:
     except (ValueError, TypeError):
         review["rating"] = 0
     review["rating_label"] = "好评" if review["rating"] >= 4 else ("中评" if review["rating"] >= 3 else "差评")
-
-    scores = item.get("scores") or []
-    if scores:
-        parts = [f"{s.get('name', '')}:{s.get('score', '')}" for s in scores if s.get('name') and s.get('score')]
-        review["sub_scores"] = " | ".join(parts)
 
     review["content"] = item.get("content", "")
     review["time"] = _parse_publish_time(item.get("publishTime", ""))
@@ -119,7 +115,7 @@ def extract_from_dom(html_text: str) -> list[dict]:
             r["content"] = content_el.get_text(strip=True)
         img_items = item.select(".commentImgList a img")
         if img_items:
-            r["image_urls"] = [img.get("src", "") for img in img_items]
+            r["image_urls"] = [extract_img_url_from_tag(img) for img in img_items]
         time_el = item.select_one(".commentTime")
         if time_el:
             elc = time_el.__copy__()
@@ -194,17 +190,6 @@ def extract_from_vacation_dom(html_text: str) -> list[dict]:
         else:
             r["rating_label"] = "好评" if r["rating"] >= 4 else ("中评" if r["rating"] >= 3 else "差评")
 
-        # 子评分（行程安排/酒店体验/司导服务 等）
-        sub_items = item.select('.ct-review-evaluation-label-row-item')
-        if sub_items:
-            parts = []
-            for si in sub_items:
-                name_el = si.select_one('[data-testid="vac_com_detail_subitem_name"]')
-                score_el = si.select_one('[data-testid="vac_com_detail_subitem_score"]')
-                if name_el and score_el:
-                    parts.append(f"{name_el.get_text(strip=True)}:{score_el.get_text(strip=True)}")
-            r["sub_scores"] = " | ".join(parts)
-
         # 评论正文
         content_el = item.select_one('[data-testid="vac_comment_detail_main_content_text"]')
         if content_el:
@@ -213,7 +198,7 @@ def extract_from_vacation_dom(html_text: str) -> list[dict]:
         # 图片列表
         img_els = item.select('[data-testid="vac_comment_attach_img"] img')
         if img_els:
-            r["image_urls"] = [img.get("src", "") for img in img_els]
+            r["image_urls"] = [extract_img_url_from_tag(img) for img in img_els]
 
         # IP 属地 + 发表日期
         ip_el = item.select_one('[data-testid="vac_comment_detail_tourtype_ipAttributionName"]')
@@ -246,7 +231,8 @@ def extract_from_vacation_dom(html_text: str) -> list[dict]:
 def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
                                   max_count: int = 0, timeout: int = 300,
                                   stop_check=None, progress_callback=None,
-                                  cookie_file=None) -> list[dict]:
+                                  cookie_file=None,
+                                  filter_chain=None) -> tuple[list[dict], int]:
     """
     通过 Selenium 驱动 Edge 浏览器，翻页爬取携程旅游（vacations.ctrip.com）评论。
 
@@ -263,7 +249,7 @@ def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
         from selenium.common.exceptions import TimeoutException, NoSuchElementException
     except ImportError:
         logger.error("Selenium 未安装，无法翻页爬取")
-        return []
+        return [], 0
 
     options = Options()
     options.add_argument("--headless=new")
@@ -273,7 +259,7 @@ def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
 
     driver = webdriver.Edge(options=options)
     all_reviews = []
-    start_time = time.time()
+    total_rejected = 0
 
     try:
         driver.get(url)
@@ -288,9 +274,8 @@ def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
                 logger.info(f"已达到目标条数 {max_count}，停止翻页")
                 break
 
-            if time.time() - start_time > timeout:
-                logger.warning("翻页超时")
-                break
+            # 单页超时检测
+            page_start = time.time()
 
             # 等待旅游评论容器加载
             try:
@@ -305,14 +290,25 @@ def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
             html = driver.page_source
             page_reviews = extract_from_vacation_dom(html)
 
+            # ---- 逐页过滤 ----
+            raw_count = len(page_reviews)
+            if filter_chain and page_reviews:
+                page_reviews, rejected_batch = filter_chain.apply(page_reviews)
+                total_rejected += len(rejected_batch)
+
             before = len(all_reviews)
             all_reviews.extend(page_reviews)
             if max_count and len(all_reviews) > max_count:
+                overflow = len(all_reviews) - max_count
                 all_reviews = all_reviews[:max_count]
+                total_rejected += overflow
             all_reviews = _dedup_reviews(all_reviews)
             new_count = len(all_reviews) - before
 
-            logger.info(f"第 {page} 页: 提取 {len(page_reviews)} 条（新增 {new_count} 条，累计 {len(all_reviews)} 条）")
+            if filter_chain:
+                logger.info(f"第 {page} 页: 提取 {raw_count} 条 → 过滤后 {len(page_reviews)} 条（累计通过 {len(all_reviews)} 条, 过滤 {total_rejected} 条）")
+            else:
+                logger.info(f"第 {page} 页: 提取 {raw_count} 条（新增 {new_count} 条，累计 {len(all_reviews)} 条）")
 
             if progress_callback:
                 progress_callback(
@@ -321,6 +317,11 @@ def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
                 )
 
             if max_count and len(all_reviews) >= max_count:
+                break
+
+            # 单页超时检测
+            if time.time() - page_start > timeout:
+                logger.warning(f"第 {page} 页处理超时（{timeout}秒）")
                 break
 
             # 判断是否有下一页
@@ -345,7 +346,7 @@ def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
         except Exception:
             pass
 
-    return all_reviews
+    return all_reviews, total_rejected
 
 
 # ==================== Selenium 真翻页爬取（景点） ====================
@@ -365,20 +366,22 @@ def _dedup_reviews(reviews: list[dict]) -> list[dict]:
 
 def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
                          timeout: int = 300, stop_check=None,
-                         progress_callback=None, cookie_file=None) -> list[dict]:
+                         progress_callback=None, cookie_file=None,
+                         filter_chain=None) -> tuple[list[dict], int]:
     """
     通过 Selenium 驱动 Edge 浏览器，点击「下一页」翻页爬取携程评论。
 
     Args:
         url: 景点页面 URL
         max_pages: 最大翻页数
-        max_count: 最大条数限制（0 表示不限）
-        timeout: 总超时秒数
+        max_count: 最大条数限制（过滤后，0 表示不限）
+        timeout: 单页超时秒数
         stop_check: 停止检测回调，返回 True 时中断翻页
         progress_callback: 进度回调 (page_num, count, total, message)
+        filter_chain: 过滤器责任链，逐页过滤
 
     Returns:
-        去重后的评论列表
+        (去重且过滤后的评论列表, 被过滤掉的条数)
     """
     try:
         from selenium import webdriver
@@ -399,7 +402,7 @@ def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
 
     driver = webdriver.Edge(options=options)
     all_reviews = []
-    start_time = time.time()
+    total_rejected = 0
 
     try:
         driver.get(url)
@@ -411,14 +414,13 @@ def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
                 logger.info("Selenium 翻页被外部停止")
                 break
 
-            # 检查是否达到最大条数
+            # 检查是否达到最大条数（过滤后计数）
             if max_count and len(all_reviews) >= max_count:
                 logger.info(f"已达到目标条数 {max_count}，停止翻页")
                 break
 
-            if time.time() - start_time > timeout:
-                logger.warning("翻页超时")
-                break
+            # 单页超时检测
+            page_start = time.time()
 
             # 等待评论容器加载
             try:
@@ -438,25 +440,41 @@ def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
                 next_data = extract_from_next_data(html)
                 page_reviews = next_data if next_data else page_reviews
 
+            # ---- 逐页过滤 ----
+            raw_count = len(page_reviews)
+            if filter_chain and page_reviews:
+                page_reviews, rejected_batch = filter_chain.apply(page_reviews)
+                total_rejected += len(rejected_batch)
+
             before = len(all_reviews)
             all_reviews.extend(page_reviews)
-            # 达到 max_count 时只保留目标条数
+            # 达到 max_count 时只保留目标条数（过滤后条数）
             if max_count and len(all_reviews) > max_count:
+                overflow = len(all_reviews) - max_count
                 all_reviews = all_reviews[:max_count]
+                total_rejected += overflow
             all_reviews = _dedup_reviews(all_reviews)
             new_count = len(all_reviews) - before
 
-            logger.info(f"第 {page} 页: 提取 {len(page_reviews)} 条（新增 {new_count} 条，累计 {len(all_reviews)} 条）")
+            if filter_chain:
+                logger.info(f"第 {page} 页: 提取 {raw_count} 条 → 过滤后 {len(page_reviews)} 条（累计通过 {len(all_reviews)} 条, 过滤 {total_rejected} 条）")
+            else:
+                logger.info(f"第 {page} 页: 提取 {raw_count} 条（新增 {new_count} 条，累计 {len(all_reviews)} 条）")
 
-            # 每页回传进度
+            # 每页回传进度（过滤后计数）
             if progress_callback:
                 progress_callback(
                     page_num=page, count=new_count, total=len(all_reviews),
                     message=f"正在爬取第 {page} 页...（累计 {len(all_reviews)} 条）"
                 )
 
-            # 检查是否已达到目标
+            # 检查是否已达到目标（过滤后计数）
             if max_count and len(all_reviews) >= max_count:
+                break
+
+            # 单页超时检测
+            if time.time() - page_start > timeout:
+                logger.warning(f"第 {page} 页处理超时（{timeout}秒）")
                 break
 
             # 判断是否还有下一页
@@ -481,7 +499,7 @@ def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
         except Exception:
             pass
 
-    return all_reviews
+    return all_reviews, total_rejected
 
 
 # ==================== URL 校验与路由 ====================
@@ -510,7 +528,8 @@ def _validate_ctrip_url(url: str) -> tuple[bool, str]:
 
 def _route_ctrip_crawler(url: str, max_pages: int = 10, max_count: int = 0,
                          timeout: int = 300, stop_check=None,
-                         progress_callback=None, cookie_file=None) -> list[dict]:
+                         progress_callback=None, cookie_file=None,
+                         filter_chain=None) -> tuple[list[dict], int]:
     """
     根据 URL 自动分发到景点爬虫或旅游爬虫。
 
@@ -528,6 +547,7 @@ def _route_ctrip_crawler(url: str, max_pages: int = 10, max_count: int = 0,
             url=url, max_pages=max_pages, max_count=max_count,
             timeout=timeout, stop_check=stop_check,
             progress_callback=progress_callback, cookie_file=cookie_file,
+            filter_chain=filter_chain,
         )
 
     # 默认走景点爬虫（兼容 you.ctrip.com 及所有旧 URL）
@@ -535,6 +555,7 @@ def _route_ctrip_crawler(url: str, max_pages: int = 10, max_count: int = 0,
         url=url, max_pages=max_pages, max_count=max_count,
         timeout=timeout, stop_check=stop_check,
         progress_callback=progress_callback, cookie_file=cookie_file,
+        filter_chain=filter_chain,
     )
 
 

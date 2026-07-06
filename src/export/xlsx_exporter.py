@@ -157,19 +157,9 @@ class XlsxExporter(BaseExporter):
             image_paths: 图片路径列表
         """
         valid_paths = [p for p in image_paths if isinstance(p, str) and os.path.isfile(p)]
-        texts = []
-
-        for p in image_paths:
-            if not isinstance(p, str) or not p:
-                continue
-            if not os.path.isfile(p):
-                texts.append(os.path.basename(p) if not p.startswith("http") else "[链接]")
-
-        # 写入文本说明（在嵌入图片之前留底）
-        if texts:
-            from openpyxl.utils import get_column_letter
-            col_letter = get_column_letter(col)
-            ws.cell(row=row, column=col, value="; ".join(texts))
+        # 没有可嵌入的本地图片时，留空不写文本
+        if not valid_paths:
+            return
 
         # 嵌入本地图片
         for i, path in enumerate(valid_paths):

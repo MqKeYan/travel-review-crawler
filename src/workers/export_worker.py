@@ -100,10 +100,18 @@ class ExportWorker(QThread):
         Args:
             fmt: 格式名称（"txt" / "csv" / "xlsx" / "docx"）
         """
+        import os
+
         # 构建输出文件路径
-        base_path = self._config.save_path or str(get_exports_dir())
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        filepath = f"{base_path}/评论数据_{timestamp}"
+        if self._config.save_path:
+            # 用户指定了保存路径：去除原扩展名，替换为目标格式扩展名
+            base = os.path.splitext(self._config.save_path)[0]
+            filepath = base
+        else:
+            # 未指定路径：使用默认导出目录 + 时间戳
+            base_path = str(get_exports_dir())
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            filepath = f"{base_path}/评论数据_{timestamp}"
 
         # 获取导出器并执行导出
         exporter = get_exporter(fmt)

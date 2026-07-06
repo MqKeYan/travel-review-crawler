@@ -7,8 +7,10 @@
     - Qt Signal → 通知 UI 刷新
     - 支持按 logger name / 级别过滤
     - 支持关键词搜索
+    - DEBUG 级别限流：防止爬虫运行时大量 DEBUG 日志撑爆 Qt 信号队列
 """
 
+import time
 import logging
 from collections import deque
 from datetime import datetime
@@ -45,7 +47,7 @@ class LogEntry:
         判断日志是否属于指定分类。
 
         Args:
-            category: "system" | "cookie" | "crawler" | "export" | "site"
+            category: "system" | "cookie" | "crawler" | "export"
 
         Returns:
             True 表示属于该分类
@@ -59,16 +61,11 @@ class LogEntry:
                 ".crawler", "crawl_worker", "task_service",
                 "captcha_solver", "image_downloader",
                 "sites.ctrip", "sites.fliggy", "sites.dianping",
+                "site_service",
             ))
         elif category == "export":
             # 导出模块：导出服务、导出工作线程
             return any(kw in name_lower for kw in ("export_service", "export_worker"))
-        elif category == "site":
-            # 站点适配器：各平台爬虫 + 站点服务
-            return any(kw in name_lower for kw in (
-                "sites.ctrip", "sites.fliggy", "sites.dianping",
-                "site_service",
-            ))
         elif category == "system":
             return True  # 系统日志显示全部
         return True
@@ -79,17 +76,60 @@ class UILogHandler(logging.Handler):
     自定义 logging Handler，将日志推送到 LogService 的内存缓冲区。
 
     通过 Qt Signal 通知 UI 层刷新，实现实时日志显示。
+
+    DEBUG 级别限流：爬虫运行时图片下载等模块每秒产生上百条 DEBUG 日志，
+    每条日志都会触发跨线程 Qt Signal 排队，导致主线程事件循环被淹没。
+    限制 DEBUG 每秒最多推送到 UI 30 条，超额的丢弃（文件日志不受影响）。
+    每隔一定时间汇报一次丢弃统计，用户可感知限流状态。
     """
+
+    # DEBUG 级别限流参数
+    _MAX_DEBUG_PER_SEC = 30          # 每秒最多推送的 DEBUG 条数
+    _DROPPED_SUMMARY_INTERVAL = 3.0  # 丢弃汇报间隔（秒）
 
     def __init__(self, log_service: "LogService"):
         super().__init__()
         self._service = log_service
         # 不做格式化，仅透传原始消息；时间戳/级别由 UI 层的 append_colored 统一渲染
         self.setFormatter(logging.Formatter("%(message)s"))
+        # 限流状态（线程安全由 logging 模块的锁保证）
+        self._dbg_window_start = 0.0
+        self._dbg_count = 0
+        self._dbg_dropped = 0
+        self._dbg_last_summary = 0.0
 
     def emit(self, record: logging.LogRecord) -> None:
-        """接收 logging 模块的日志记录，推送到 LogService"""
+        """接收 logging 模块的日志记录，推送到 LogService（DEBUG 级别有限流）"""
         try:
+            # ---- DEBUG 级别限流 ----
+            if record.levelno == logging.DEBUG:
+                now = time.monotonic()
+                # 每秒重置计数窗口
+                if now - self._dbg_window_start >= 1.0:
+                    # 周期性汇报丢弃统计
+                    if self._dbg_dropped > 0 and now - self._dbg_last_summary >= self._DROPPED_SUMMARY_INTERVAL:
+                        summary = LogEntry(
+                            timestamp=datetime.fromtimestamp(now),
+                            level=logging.WARNING,
+                            level_name="WARNING",
+                            logger_name="log_service",
+                            message=(
+                                f"⚠ 限流提示：最近 {now - self._dbg_last_summary:.0f}s 内"
+                                f"丢弃了 {self._dbg_dropped} 条 DEBUG 日志"
+                                f"（完整记录见日志文件）"
+                            ),
+                        )
+                        self._service.add_entry(summary)
+                        self._dbg_last_summary = now
+                        self._dbg_dropped = 0
+                    self._dbg_window_start = now
+                    self._dbg_count = 0
+
+                self._dbg_count += 1
+                if self._dbg_count > self._MAX_DEBUG_PER_SEC:
+                    self._dbg_dropped += 1
+                    return  # 丢弃超额的 DEBUG，不推送 UI
+
             entry = LogEntry(
                 timestamp=datetime.fromtimestamp(record.created),
                 level=record.levelno,

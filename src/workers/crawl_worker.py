@@ -119,7 +119,8 @@ class CrawlWorker(QThread):
 
             # ---- 爬取主循环 ----
             def progress_callback(page_num=None, count=None, total=None, error=None, message=""):
-                """爬取进度回调（从爬虫引擎的 crawl_all_pages 调用）"""
+                """爬取进度回调（从爬虫引擎的 crawl_all_pages 调用）。
+                count/total 均为过滤后通过的数量。"""
                 if error:
                     self._emit_error(error)
                     return
@@ -139,8 +140,8 @@ class CrawlWorker(QThread):
                 }
                 self.progress.emit(progress_data)
 
-            # 调用爬虫引擎
-            raw_reviews = crawl_all_pages(
+            # 调用爬虫引擎（过滤在爬取过程中逐页执行）
+            reviews, rejected_count = crawl_all_pages(
                 adapter=adapter,
                 cookie_file=self._config.cookie_file,
                 max_pages=self._config.scrape_config.max_pages,
@@ -149,17 +150,14 @@ class CrawlWorker(QThread):
                 stop_check=self._is_stopped,
                 target_url=self._config.target_url,
                 delay_seconds=self._config.scrape_config.delay_seconds,
+                filter_chain=self._filter_chain,
             )
 
-            # ---- 应用过滤器 ----
-            self._log_message(f"原始数据 {len(raw_reviews)} 条，开始过滤...")
-            passed, rejected = self._filter_chain.apply(raw_reviews)
-
-            self._reviews = passed
-            self._log_message(
-                f"过滤完成: 保留 {len(passed)} 条，"
-                f"过滤掉 {len(rejected)} 条"
-            )
+            self._reviews = reviews
+            if rejected_count > 0:
+                self._log_message(
+                    f"过滤统计: 通过 {len(reviews)} 条，过滤掉 {rejected_count} 条"
+                )
 
             # ---- 下载评论图片到本地 ----
             # 如果用户勾选了"移除图片"，跳过下载
@@ -201,7 +199,7 @@ class CrawlWorker(QThread):
                 "task_name": self._config.task_name,
                 "reviews": self._reviews,
                 "count": len(self._reviews),
-                "rejected_count": len(rejected),
+                "rejected_count": rejected_count,
                 "elapsed": elapsed_str,
             })
 

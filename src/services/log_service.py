@@ -219,7 +219,8 @@ class LogService(QObject):
         result = []
         kw = keyword.lower().strip() if keyword else ""
 
-        for entry in self._buffer:
+        # 先拷贝快照再迭代，避免另一线程同时写入 deque 导致 "mutated during iteration" 崩溃
+        for entry in list(self._buffer):
             # 分类过滤
             if not entry.matches_category(category):
                 continue

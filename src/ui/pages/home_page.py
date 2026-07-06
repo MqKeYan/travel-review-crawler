@@ -9,10 +9,12 @@
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QFrame, QGridLayout,
+    QPushButton, QFrame, QGridLayout, QSizePolicy,
 )
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtGui import QFont, QCursor
+
+from src.ui.components.task_card import _ElidedLabel
 
 
 class SystemInfoBar(QFrame):
@@ -165,19 +167,32 @@ class TaskMiniCard(QFrame):
         super().__init__(parent)
         self.setObjectName("taskCard")
         self.setFixedHeight(76)
+        self.setMinimumWidth(0)
+
+        # 悬停 1 秒后弹出任务名称提示（与任务列表卡片逻辑一致）
+        self._task_name = task_name
+        self._tip_label: QLabel | None = None
+        self._hover_timer = QTimer(self)
+        self._hover_timer.setSingleShot(True)
+        self._hover_timer.setInterval(1000)
+        self._hover_timer.timeout.connect(self._show_hover_tip)
+        self.setMouseTracking(True)
 
         layout = QHBoxLayout()
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(16)
 
-        # 任务名（弹性占位）
-        name_label = QLabel(task_name)
+        # 任务名（弹性占位，长名称自动省略，不挤压其他列）
+        name_label = _ElidedLabel(task_name)
         name_label.setFont(QFont("微软雅黑", 14, QFont.Weight.Bold))
         name_label.setObjectName("taskMiniName")
+        name_label.setMinimumWidth(0)
+        name_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
 
         # 网站
         site_label = QLabel(site)
         site_label.setObjectName("taskMiniSite")
+        site_label.setMinimumWidth(0)
 
         # 评论数
         count_label = QLabel(f"{reviews} 条")
@@ -198,6 +213,39 @@ class TaskMiniCard(QFrame):
         layout.addWidget(time_label, 2)
         layout.addWidget(status_label, 1)
         self.setLayout(layout)
+
+    def enterEvent(self, event) -> None:
+        self._hover_timer.start()
+
+    def leaveEvent(self, event) -> None:
+        """鼠标离开卡片区域时取消倒计时并隐藏提示"""
+        self._hover_timer.stop()
+        self._hide_tip()
+
+    def mouseMoveEvent(self, event) -> None:
+        """鼠标在卡片内移动时，隐藏提示并重新计时"""
+        self._hide_tip()
+        self._hover_timer.start()
+        super().mouseMoveEvent(event)
+
+    def _show_hover_tip(self) -> None:
+        if self._tip_label is None:
+            self._tip_label = QLabel(self.window())
+            self._tip_label.setWindowFlags(Qt.WindowType.ToolTip)
+            self._tip_label.setFont(QFont("微软雅黑", 13))
+            self._tip_label.setStyleSheet(
+                "background-color: #1f231f; color: #E8E8E8;"
+                "padding: 6px 10px; border-radius: 6px;"
+            )
+        self._tip_label.setText(f"任务名称：{self._task_name}")
+        self._tip_label.adjustSize()
+        pos = QCursor.pos()
+        self._tip_label.move(pos.x() - self._tip_label.width() // 2, pos.y() - self._tip_label.height())
+        self._tip_label.show()
+
+    def _hide_tip(self) -> None:
+        if self._tip_label:
+            self._tip_label.hide()
 
 
 class HomePage(QWidget):

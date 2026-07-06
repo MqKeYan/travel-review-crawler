@@ -194,7 +194,9 @@ def _handle_fliggy_captcha(driver, url: str, progress_callback=None):
     visible_options.add_experimental_option("useAutomationExtension", False)
     visible_options.add_argument("--window-size=1920,1080")
 
-    visible_driver = webdriver.Edge(options=visible_options)
+    from src.engine.browser import create_edge_driver
+
+    visible_driver = create_edge_driver(visible_options)
 
     # 注入 Cookie 后导航到当前页面
     visible_driver.get("https://www.fliggy.com")
@@ -240,7 +242,7 @@ def _handle_fliggy_captcha(driver, url: str, progress_callback=None):
     headless_options.add_argument("--no-sandbox")
     headless_options.add_argument("--window-size=1920,1080")
 
-    new_driver = webdriver.Edge(options=headless_options)
+    new_driver = create_edge_driver(headless_options)
 
     # 注入通过验证后的 Cookie
     new_driver.get("https://www.fliggy.com")
@@ -311,7 +313,9 @@ def selenium_crawl_fliggy(
     # 后台静默模式（不显示浏览器窗口）
     options.add_argument("--headless=new")
 
-    driver = webdriver.Edge(options=options)
+    from src.engine.browser import create_edge_driver
+
+    driver = create_edge_driver(options)
     all_reviews = []
     batch = 0
 

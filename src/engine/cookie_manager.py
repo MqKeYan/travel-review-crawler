@@ -71,15 +71,14 @@ def _create_browser_driver(browser_config: dict):
     opts_mod = importlib.import_module(browser_config["driver_module"])
     Options = getattr(opts_mod, browser_config["options_class"])
 
-    webdriver_mod = importlib.import_module("selenium.webdriver")
-    WebDriver = getattr(webdriver_mod, browser_config["webdriver_class"])
-
     options = Options()
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
 
-    driver = WebDriver(options=options)
+    from src.engine.browser import create_driver
+
+    driver = create_driver(browser_config["name"], options)
     return driver
 
 

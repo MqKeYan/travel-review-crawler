@@ -277,7 +277,9 @@ def selenium_crawl_dianping(
     options.add_argument("--no-sandbox")
     options.add_argument("--window-size=1920,1080")
 
-    driver = webdriver.Edge(options=options)
+    from src.engine.browser import create_edge_driver
+
+    driver = create_edge_driver(options)
     all_reviews = []
 
     # 构建评论列表页 URL

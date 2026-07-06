@@ -107,6 +107,7 @@ class TaskPage(QWidget):
         self._task_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         self._task_list_widget = _TaskListContainer()
+        self._task_list_widget.setMinimumWidth(0)  # 允许收缩，不撑破滚动区域
         self._task_list_widget.empty_clicked.connect(self.clear_detail)
         self._task_list_layout = QVBoxLayout()
         self._task_list_layout.setContentsMargins(0, 0, 0, 0)
@@ -235,6 +236,7 @@ class TaskPage(QWidget):
 
         status_text = STATUS_CN.get(task.status, task.status.value if task.status else "未知")
         self._detail_info.setText(
+            f"任务名称：{task.task_name}\n"
             f"网站: {task.site_display_name or task.site}\n"
             f"目标 URL: {task.target_url}\n"
             f"状态: {status_text}\n"
@@ -260,9 +262,9 @@ class TaskPage(QWidget):
 
         self.task_selected.emit(task_name)
 
-    def update_detail_progress(self, progress_data: dict) -> None:
-        """实时更新详情页的进度条"""
-        if self._stack.currentIndex() == 1:
+    def update_detail_progress(self, task_name: str, progress_data: dict) -> None:
+        """实时更新详情页的进度条（仅当进度属于当前选中任务时更新）"""
+        if self._stack.currentIndex() == 1 and self._selected_task_name == task_name:
             self._detail_progress.update_progress(progress_data)
 
     def refresh_task_card(self, task_name: str) -> None:

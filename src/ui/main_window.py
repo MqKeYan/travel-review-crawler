@@ -467,8 +467,8 @@ class MainWindow(QMainWindow):
             task.update_progress_from_dict(progress_data)
             # 进度变更时保存到磁盘
             self._task_service._save_to_disk()
-            # 实时更新详情页进度条
-            self._task_page.update_detail_progress(progress_data)
+            # 实时更新详情页进度条（传入任务名以校验是否属于当前选中任务）
+            self._task_page.update_detail_progress(task_name, progress_data)
             # 实时刷新任务卡片状态和进度
             self._task_page.refresh_task_card(task_name)
         # 同步首页统计

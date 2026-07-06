@@ -257,7 +257,9 @@ def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
 
-    driver = webdriver.Edge(options=options)
+    from src.engine.browser import create_edge_driver
+
+    driver = create_edge_driver(options)
     all_reviews = []
     total_rejected = 0
 
@@ -400,7 +402,9 @@ def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
 
-    driver = webdriver.Edge(options=options)
+    from src.engine.browser import create_edge_driver
+
+    driver = create_edge_driver(options)
     all_reviews = []
     total_rejected = 0
 

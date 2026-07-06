@@ -743,7 +743,7 @@ def get_dark_forest_stylesheet() -> str:
     QToolTip {
         background-color: #1f231f;
         color: #E8E8E8;
-        border: 1px solid #00C853;
+        border: none;
         padding: 6px 10px;
         border-radius: 6px;
         font-size: 13px;
@@ -1476,7 +1476,7 @@ def get_light_stylesheet() -> str:
     QToolTip {
         background-color: #ffffff;
         color: #1a1d1a;
-        border: 1px solid #00A844;
+        border: none;
         padding: 6px 10px;
         border-radius: 6px;
         font-size: 13px;

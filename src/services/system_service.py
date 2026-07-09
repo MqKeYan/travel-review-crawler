@@ -48,7 +48,12 @@ DEFAULT_SETTINGS = {
     },
     "export": {
         "default_path": "",
-        "default_formats": ["xlsx", "csv"],
+        "default_formats": ["xlsx"],
+    },
+    "notify": {
+        "default_desktop_popup": True,
+        "default_sound": False,
+        "default_pushplus_token": "",
     },
     "proxy": {
         "enabled": False,
@@ -56,7 +61,7 @@ DEFAULT_SETTINGS = {
         "https": "",
     },
     "crawl": {
-        "default_max_count": 500,
+        "default_max_count": None,
         "default_max_pages": None,
         "default_delay_seconds": 2,
         "default_remove_images": False,
@@ -180,12 +185,6 @@ class SystemService:
         # 代理状态
         proxy_enabled = self._settings.get("proxy", {}).get("enabled", False)
 
-        # 网络延迟 (ms, 通过百度检测)
-        latency_ms = self._ping_latency() if hasattr(self, '_last_latency') else 0
-        if not hasattr(self, '_last_latency'):
-            self._last_latency = 0
-            self._last_latency_time = 0
-
         # 格式化启动时间
         started_at = datetime.fromtimestamp(self._start_time).strftime("%Y-%m-%d %H:%M")
 
@@ -200,25 +199,8 @@ class SystemService:
             "app_disk_mb": app_disk_mb,
             "disk_free_gb": disk_free_gb,
             "proxy_enabled": proxy_enabled,
-            "latency_ms": self._last_latency,
             "started_at": started_at,
         }
-
-    def _ping_latency(self) -> int:
-        """后台异步检测网络延迟（到百度），缓存结果避免频繁请求"""
-        import time as _time
-        now = _time.time()
-        if now - getattr(self, '_last_latency_time', 0) < 5:
-            return getattr(self, '_last_latency', 0)
-        try:
-            import requests
-            start = _time.time()
-            requests.get("https://www.baidu.com", timeout=3)
-            self._last_latency = int((_time.time() - start) * 1000)
-        except Exception:
-            self._last_latency = -1
-        self._last_latency_time = now
-        return self._last_latency
 
     def get_settings(self) -> dict:
         """获取完整设置字典"""

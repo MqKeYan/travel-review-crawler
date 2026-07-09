@@ -138,12 +138,12 @@ def _handle_fliggy_captcha(driver, url: str, progress_callback=None):
     飞猪验证码统一处理：先自动求解 → 失败则弹出可见浏览器让用户手动过验证。
 
     自动求解成功时返回原 driver（无需重建）。
-    手动验证完成后会关闭原 headless driver，弹出可见浏览器供用户操作，
-    验证通过后重建 headless driver 并注入 Cookie，返回新 driver。
+    手动验证完成后会关闭原屏幕外隐藏 driver，弹出可见浏览器供用户操作，
+    验证通过后重建屏幕外隐藏 driver 并注入 Cookie，返回新 driver。
     用户可以随时关闭弹窗，检测到验证码消失即视为通过。
 
     Args:
-        driver: 当前 headless WebDriver
+        driver: 当前屏幕外隐藏 WebDriver
         url: 目标页面 URL
         progress_callback: 进度回调
 
@@ -173,7 +173,7 @@ def _handle_fliggy_captcha(driver, url: str, progress_callback=None):
             message="自动过验证失败，请在浏览器窗口中手动完成验证码..."
         )
 
-    # 保存当前 headless driver 的 Cookie 和 URL
+    # 保存当前屏幕外隐藏 driver 的 Cookie 和 URL
     try:
         cookies = driver.get_cookies()
         current_url = driver.current_url or url
@@ -181,18 +181,17 @@ def _handle_fliggy_captcha(driver, url: str, progress_callback=None):
         cookies = []
         current_url = url
 
-    # 关闭 headless driver
+    # 关闭屏幕外隐藏 driver
     try:
         driver.quit()
     except Exception:
         pass
 
-    # 打开可见浏览器（和获取 Cookie 时一致，无 --headless）
+    # 打开可见浏览器供用户手动验证
     visible_options = Options()
     visible_options.add_argument("--disable-blink-features=AutomationControlled")
     visible_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     visible_options.add_experimental_option("useAutomationExtension", False)
-    visible_options.add_argument("--window-size=1920,1080")
 
     from src.engine.browser import create_edge_driver
 
@@ -232,17 +231,16 @@ def _handle_fliggy_captcha(driver, url: str, progress_callback=None):
     except Exception:
         pass
 
-    # ---- 第三步：重建 headless driver，恢复静默爬取 ----
-    headless_options = Options()
-    headless_options.add_argument("--headless=new")
-    headless_options.add_argument("--disable-blink-features=AutomationControlled")
-    headless_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    headless_options.add_experimental_option("useAutomationExtension", False)
-    headless_options.add_argument("--disable-gpu")
-    headless_options.add_argument("--no-sandbox")
-    headless_options.add_argument("--window-size=1920,1080")
+    # ---- 第三步：重建屏幕外隐藏 driver，恢复静默爬取 ----
+    hidden_options = Options()
+    hidden_options.add_argument("--window-position=-32000,-32000")
+    hidden_options.add_argument("--disable-software-rasterizer")
+    hidden_options.add_argument("--disable-blink-features=AutomationControlled")
+    hidden_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    hidden_options.add_experimental_option("useAutomationExtension", False)
+    hidden_options.add_argument("--no-sandbox")
 
-    new_driver = create_edge_driver(headless_options)
+    new_driver = create_edge_driver(hidden_options)
 
     # 注入通过验证后的 Cookie
     new_driver.get("https://www.fliggy.com")
@@ -280,12 +278,14 @@ def _dedup_reviews(reviews: list[dict]) -> list[dict]:
 
 def selenium_crawl_fliggy(
     url: str,
-    max_pages: int = 100,
+    max_pages: int = 99999,
     max_count: int = 0,
     timeout: int = 600,
     stop_check=None,
     progress_callback=None,
     cookie_file: str | None = None,
+    task_name: str = "",
+    driver_ref: list | None = None,
 ) -> list[dict]:
     """
     飞猪评论爬虫：
@@ -293,6 +293,7 @@ def selenium_crawl_fliggy(
     2. 点击「全部评价」按钮展开评论面板
     3. 循环点击 #morecomments 加载更多评论
     """
+    _prefix = f"任务 [{task_name}] " if task_name else ""
     try:
         from selenium import webdriver
         from selenium.webdriver.edge.options import Options
@@ -300,22 +301,23 @@ def selenium_crawl_fliggy(
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
     except ImportError:
-        logger.error("Selenium 未安装")
+        logger.error(f"{_prefix}Selenium 未安装")
         return []
 
     options = Options()
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
+    options.add_argument("--window-position=-32000,-32000")
+    options.add_argument("--disable-software-rasterizer")
     options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--disable-gpu")
+
     options.add_argument("--no-sandbox")
-    options.add_argument("--window-size=1920,1080")
-    # 后台静默模式（不显示浏览器窗口）
-    options.add_argument("--headless=new")
 
     from src.engine.browser import create_edge_driver
 
     driver = create_edge_driver(options)
+    if driver_ref is not None:
+        driver_ref.append(driver)
     all_reviews = []
     batch = 0
 
@@ -339,15 +341,14 @@ def selenium_crawl_fliggy(
                         })
                     except Exception:
                         pass
-                logger.info(f"飞猪: 已注入 {len(cookies)} 条 Cookie")
+                logger.info(f"{_prefix}飞猪: 已注入 {len(cookies)} 条 Cookie")
 
         driver.get(url)
         wait = WebDriverWait(driver, 20)
         time.sleep(2)
 
-        # 检查登录跳转
         if "login" in driver.current_url.lower():
-            logger.error("飞猪: 跳转到登录页，请先获取 Cookie")
+            logger.error(f"{_prefix}飞猪: 跳转到登录页，请先获取 Cookie")
             return []
 
         # 验证码检测：自动求解 → 失败则弹窗手动验证
@@ -355,7 +356,7 @@ def selenium_crawl_fliggy(
         if detect_slider_captcha(driver):
             new_driver, ok = _handle_fliggy_captcha(driver, url, progress_callback)
             if not ok:
-                logger.error("飞猪: 验证码未通过，放弃本次爬取")
+                logger.error(f"{_prefix}飞猪: 验证码未通过，放弃本次爬取")
                 try:
                     new_driver.quit()
                 except Exception:
@@ -365,11 +366,8 @@ def selenium_crawl_fliggy(
             wait = WebDriverWait(driver, 20)
             time.sleep(2)
 
-        # ---- 步骤1：滚动到评论区域，点击「全部评价」 ----
-        # 先尝试直接跳到评论锚点
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(1.5)
-        # 如果页面有评论锚点，直接定位
         try:
             comment_section = driver.find_element(By.CSS_SELECTOR, "#comment, .trip-pc-detail-comments")
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", comment_section)
@@ -377,7 +375,6 @@ def selenium_crawl_fliggy(
         except NoSuchElementException:
             pass
 
-        # 查找「全部评价」按钮
         btns = driver.find_elements(By.CSS_SELECTOR, ".trip-pc-detail-comments__show-more-btn")
         if not btns:
             btns = driver.find_elements(By.XPATH, "//*[contains(text(),'全部评价')]")
@@ -386,12 +383,12 @@ def selenium_crawl_fliggy(
                 driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", btns[0])
                 time.sleep(0.5)
                 driver.execute_script("arguments[0].click();", btns[0])
-                logger.info("飞猪: 已点击「全部评价」")
+                logger.info(f"{_prefix}飞猪: 已点击「全部评价」")
                 time.sleep(3)
             except StaleElementReferenceException:
-                logger.info("飞猪: 按钮已失效(页面已变化)，跳过点击")
+                logger.info(f"{_prefix}飞猪: 按钮已失效(页面已变化)，跳过点击")
         else:
-            logger.info("飞猪: 未找到「全部评价」，尝试直接提取已有评论")
+            logger.info(f"{_prefix}飞猪: 未找到「全部评价」，尝试直接提取已有评论")
 
         # ---- 步骤2：在评论面板内滚动加载更多 ----
         # 找到评论面板的滚动容器
@@ -400,7 +397,7 @@ def selenium_crawl_fliggy(
                      ".trip-pc-detail-comments-pad__wrap"):
             try:
                 scroll_container = driver.find_element(By.CSS_SELECTOR, sel)
-                logger.info(f"飞猪: 找到评论滚动容器 {sel}")
+                logger.info(f"{_prefix}飞猪: 找到评论滚动容器 {sel}")
                 break
             except NoSuchElementException:
                 continue
@@ -416,13 +413,13 @@ def selenium_crawl_fliggy(
 
             # 检测验证码：自动求解 → 失败则弹窗手动验证
             if detect_slider_captcha(driver):
-                logger.warning("飞猪: 爬取中再次遇到验证码...")
+                logger.warning(f"{_prefix}飞猪: 爬取中再次遇到验证码...")
                 if progress_callback:
                     progress_callback(page_num=batch, count=0, total=len(all_reviews),
                                       message="再次遇到验证码，正在自动求解...")
                 new_driver, ok = _handle_fliggy_captcha(driver, url, progress_callback)
                 if not ok:
-                    logger.error("飞猪: 验证码未通过，终止爬取")
+                    logger.error(f"{_prefix}飞猪: 验证码未通过，终止爬取")
                     try:
                         new_driver.quit()
                     except Exception:
@@ -467,7 +464,7 @@ def selenium_crawl_fliggy(
             new_count = len(all_reviews) - before
 
             batch += 1
-            logger.info(f"飞猪 第{batch}批: 提取{len(page_reviews)}条 (新增{new_count}，累计{len(all_reviews)})")
+            logger.info(f"{_prefix}飞猪 第{batch}批: 提取{len(page_reviews)}条 (新增{new_count}，累计{len(all_reviews)})")
 
             if progress_callback:
                 progress_callback(
@@ -502,12 +499,14 @@ def selenium_crawl_fliggy(
                 dry_count = 0
 
     except Exception as e:
-        logger.error(f"飞猪异常: {e}")
+        logger.error(f"{_prefix}飞猪异常: {e}")
     finally:
         try:
             driver.quit()
         except Exception:
             pass
+        if driver_ref is not None:
+            driver_ref.clear()
 
     return all_reviews
 
@@ -527,13 +526,14 @@ def create_fliggy_adapter() -> SiteAdapter:
     return SiteAdapter(
         site_name="fliggy",
         site_display_name="飞猪",
+        crawl_type="scenic",
         domain=".fliggy.com",
         login_url="https://login.taobao.com/havanaone/login/login.htm",
         url_template="https://traveldetail.fliggy.com/item.htm?id={id}&pc=1",
         http_method=HttpMethod.GET,
         page_size=20,
         page_start=1,
-        max_pages_limit=100,
+        max_pages_limit=99999,
         review_selector="",
         raw_html_parser=extract_fliggy_reviews,
         selenium_crawler=selenium_crawl_fliggy,

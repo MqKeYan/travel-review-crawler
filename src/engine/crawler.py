@@ -279,7 +279,7 @@ def crawl_single_page(
     for attempt in range(MAX_RETRY_COUNT):
         # 重试前检查停止标志
         if stop_check and stop_check():
-            logger.info(f"第 {page_num} 页爬取被外部停止")
+            logger.info(f"{_prefix}第 {page_num} 页爬取被外部停止")
             return [], False
 
         try:
@@ -290,7 +290,7 @@ def crawl_single_page(
                 # 指数退避：1s → 3s → 9s
                 delay = RETRY_BACKOFF_BASE * (3 ** attempt)
                 logger.warning(
-                    f"第 {page_num} 页请求失败（第{attempt+1}次/共{MAX_RETRY_COUNT}次）"
+                    f"{_prefix}第 {page_num} 页请求失败（第{attempt+1}次/共{MAX_RETRY_COUNT}次）"
                     f"，{delay:.0f}s 后重试: {e}"
                 )
                 time.sleep(delay)
@@ -309,7 +309,7 @@ def crawl_single_page(
 
         # ---- 解析响应 ----
         if response.status_code != 200:
-            logger.warning(f"第 {page_num} 页返回非 200 状态码: {response.status_code}")
+            logger.warning(f"{_prefix}第 {page_num} 页返回非 200 状态码: {response.status_code}")
             return [], False
 
         try:
@@ -336,6 +336,8 @@ def crawl_all_pages(
     target_url: str | None = None,
     delay_seconds: float = 2.0,
     filter_chain=None,
+    task_name: str = "",
+    driver_ref: list | None = None,
 ) -> tuple[list[dict], int]:
     """
     爬取指定网站的全部评论数据（多页自动翻页）。
@@ -362,6 +364,7 @@ def crawl_all_pages(
     """
     page_limit = max_pages or adapter.max_pages_limit
     total_rejected = 0
+    _prefix = f"任务 [{task_name}] " if task_name else ""
 
     def _apply_filters(reviews: list[dict]) -> tuple[list[dict], int]:
         """对一批评论应用过滤器链，返回 (通过列表, 拒绝条数)"""
@@ -372,7 +375,6 @@ def crawl_all_pages(
 
     # ---- Selenium 翻页模式（需要 JS 渲染的网站） ----
     if adapter.selenium_crawler and target_url and page_limit > 1:
-        logger.info(f"使用 Selenium 翻页爬取 (最多 {page_limit} 页)")
         if progress_callback:
             progress_callback(page_num=1, count=0, total=0, message="启动浏览器...")
 
@@ -388,9 +390,10 @@ def crawl_all_pages(
                     progress_callback=progress_callback,
                     cookie_file=cookie_file,
                     filter_chain=filter_chain,
+                    task_name=task_name,
+                    driver_ref=driver_ref,
                 )
             except TypeError:
-                # 旧版 Selenium 爬虫不接受 filter_chain，回退
                 raw_reviews = adapter.selenium_crawler(
                     url=target_url,
                     max_pages=page_limit,
@@ -399,9 +402,11 @@ def crawl_all_pages(
                     stop_check=stop_check,
                     progress_callback=progress_callback,
                     cookie_file=cookie_file,
+                    task_name=task_name,
+                    driver_ref=driver_ref,
                 )
         except Exception as e:
-            logger.error(f"Selenium 翻页失败: {e}")
+            logger.error(f"{_prefix}Selenium 翻页失败: {e}")
             raw_reviews = [], 0
 
         # 处理返回值：新版返回 (list, int)，旧版返回 list
@@ -415,7 +420,7 @@ def crawl_all_pages(
         if progress_callback:
             progress_callback(page_num=1, count=total, total=total,
                             message=f"爬取完成: 通过 {total} 条, 过滤 {total_rejected} 条")
-        logger.info(f"Selenium 爬取完成，共 {total} 条（过滤掉 {total_rejected} 条）")
+        logger.info(f"{_prefix}Selenium 爬取完成，共 {total} 条（过滤掉 {total_rejected} 条）")
         return passed_reviews, total_rejected
 
     # ---- 常规 requests 翻页模式 ----
@@ -429,7 +434,7 @@ def crawl_all_pages(
     for page_num in range(adapter.page_start, adapter.page_start + page_limit):
         # 检查外部停止请求
         if stop_check and stop_check():
-            logger.info("爬取任务被外部停止")
+            logger.info(f"{_prefix}爬取任务被外部停止")
             break
 
         # 检查是否已达到目标条数（过滤后条数）
@@ -460,13 +465,13 @@ def crawl_all_pages(
 
                 if filter_chain:
                     logger.info(
-                        f"第 {page_num} 页完成: 解析 {len(raw_reviews)} 条"
+                        f"{_prefix}第 {page_num} 页完成: 解析 {len(raw_reviews)} 条"
                         f" → 过滤后 {page_passed_count} 条"
                         f"（累计通过 {len(all_reviews)} 条, 过滤 {total_rejected} 条）"
                     )
                 else:
                     logger.info(
-                        f"第 {page_num} 页完成: 解析 {len(raw_reviews)} 条"
+                        f"{_prefix}第 {page_num} 页完成: 解析 {len(raw_reviews)} 条"
                         f"（累计 {len(all_reviews)} 条）"
                     )
 
@@ -483,7 +488,7 @@ def crawl_all_pages(
 
             # 末页判断（基于原始解析条数，不受过滤影响）
             if not has_more:
-                logger.info(f"已到末页（第 {page_num} 页），爬取结束")
+                logger.info(f"{_prefix}已到末页（第 {page_num} 页），爬取结束")
                 break
 
             # 正常请求间延迟（使用用户配置的间隔）
@@ -491,16 +496,16 @@ def crawl_all_pages(
 
         except (NetworkError, ParseError) as e:
             consecutive_errors += 1
-            logger.error(f"第 {page_num} 页爬取出错: {e}")
+            logger.error(f"{_prefix}第 {page_num} 页爬取出错: {e}")
             # 超过连续错误阈值时放弃
             if consecutive_errors >= 3:
-                logger.error("连续错误过多，停止爬取")
+                logger.error(f"{_prefix}连续错误过多，停止爬取")
                 break
             _wait_with_adaptive_delay(consecutive_errors)
 
         except (RateLimitError, CaptchaDetectedError, CookieExpiredError) as e:
             # 这些异常需要用户介入，立即停止
-            logger.error(f"爬取中断: {e}")
+            logger.error(f"{_prefix}爬取中断: {e}")
             # 将异常信息通过回调传递
             if progress_callback:
                 progress_callback(

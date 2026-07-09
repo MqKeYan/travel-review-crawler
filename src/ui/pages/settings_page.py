@@ -20,9 +20,9 @@ from src.ui.theme.dark_forest_theme import THEME_DISPLAY_NAMES
 
 
 class _SelectAllLineEdit(QLineEdit):
-    """单击全选文本的输入框"""
-    def mousePressEvent(self, event):
-        super().mousePressEvent(event)
+    """双击全选文本"""
+    def mouseDoubleClickEvent(self, event):
+        super().mouseDoubleClickEvent(event)
         self.selectAll()
 
 
@@ -122,6 +122,8 @@ class SettingsPage(QWidget):
         self._crawl_delay.setValue(2)
         self._crawl_delay.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._crawl_delay.installEventFilter(self)
+        # 监听内部输入框的鼠标事件，实现点击空白/双击全选
+        self._crawl_delay.lineEdit().installEventFilter(self)
         delay_row.addWidget(self._crawl_delay)
         delay_row.addWidget(QLabel("秒"))
         delay_row.addStretch()
@@ -144,6 +146,27 @@ class SettingsPage(QWidget):
 
         crawl_group.setLayout(crawl_form)
         layout.addWidget(crawl_group)
+
+        # ---- 默认通知设置 ----
+        notify_group = QGroupBox("默认通知设置")
+        notify_form = QFormLayout()
+        notify_form.setSpacing(10)
+
+        notify_check_row = QHBoxLayout()
+        notify_check_row.setSpacing(16)
+        self._notify_popup_cb = QCheckBox("桌面弹窗")
+        self._notify_sound_cb = QCheckBox("声音提示")
+        notify_check_row.addWidget(self._notify_popup_cb)
+        notify_check_row.addWidget(self._notify_sound_cb)
+        notify_check_row.addStretch()
+        notify_form.addRow(self._label("完成通知:"), notify_check_row)
+
+        self._notify_pushplus = _SelectAllLineEdit()
+        self._notify_pushplus.setPlaceholderText("输入 PushPlus Token（留空不推送）")
+        notify_form.addRow(self._label("PushPlus Token:"), self._notify_pushplus)
+
+        notify_group.setLayout(notify_form)
+        layout.addWidget(notify_group)
 
         # ---- 代理设置 ----
         proxy_group = QGroupBox("代理设置")
@@ -189,7 +212,7 @@ class SettingsPage(QWidget):
         export_form = QFormLayout()
 
         self._default_path_input = _SelectAllLineEdit()
-        self._default_path_input.setPlaceholderText("留空使用默认导出目录")
+        self._default_path_input.setPlaceholderText("留空则默认使用软件目录的exports文件夹")
         browse_btn = QPushButton("浏览...")
         browse_btn.setObjectName("secondaryBtn")
         browse_btn.setStyleSheet("QPushButton#secondaryBtn { min-height: 0px; padding: 11px 14px; }")
@@ -223,7 +246,7 @@ class SettingsPage(QWidget):
         reset_btn.clicked.connect(self.reset_settings_requested.emit)
         btn_row.addWidget(reset_btn)
 
-        reinit_btn = QPushButton("重新初始化")
+        reinit_btn = QPushButton("初始化")
         reinit_btn.setObjectName("secondaryBtn")
         reinit_btn.setToolTip("清空累计统计、任务记录、Cookie 和设置，恢复为首次使用状态")
         reinit_btn.clicked.connect(self.reinitialize_requested.emit)
@@ -254,6 +277,9 @@ class SettingsPage(QWidget):
         self._crawl_filter_emoji.toggled.connect(self._auto_save)
         self._crawl_filter_pure_emoji.toggled.connect(self._auto_save)
         self._crawl_filter_ad.toggled.connect(self._auto_save)
+        self._notify_popup_cb.toggled.connect(self._auto_save)
+        self._notify_sound_cb.toggled.connect(self._auto_save)
+        self._notify_pushplus.textChanged.connect(self._auto_save)
         self._proxy_enable_cb.toggled.connect(self._auto_save)
         self._proxy_http_input.textChanged.connect(self._auto_save)
         self._proxy_https_input.textChanged.connect(self._auto_save)
@@ -277,6 +303,11 @@ class SettingsPage(QWidget):
                 "enabled": self._proxy_enable_cb.isChecked(),
                 "http": self._proxy_http_input.text().strip(),
                 "https": self._proxy_https_input.text().strip(),
+            },
+            "notify": {
+                "default_desktop_popup": self._notify_popup_cb.isChecked(),
+                "default_sound": self._notify_sound_cb.isChecked(),
+                "default_pushplus_token": self._notify_pushplus.text().strip(),
             },
             "export": {
                 "default_path": self._default_path_input.text().strip(),
@@ -311,6 +342,11 @@ class SettingsPage(QWidget):
         self._crawl_filter_pure_emoji.setChecked(crawl.get("default_skip_pure_emoji", False))
         self._crawl_filter_ad.setChecked(crawl.get("default_ad_filter", False))
 
+        notify = settings.get("notify", {})
+        self._notify_popup_cb.setChecked(notify.get("default_desktop_popup", False))
+        self._notify_sound_cb.setChecked(notify.get("default_sound", False))
+        self._notify_pushplus.setText(notify.get("default_pushplus_token", ""))
+
         export = settings.get("export", {})
         self._default_path_input.setText(export.get("default_path", ""))
         self._loading = False
@@ -323,9 +359,10 @@ class SettingsPage(QWidget):
                 if not focused:
                     event.ignore()
                     return True
-            elif event.type() == QEvent.Type.FocusIn:
-                from PySide6.QtCore import QTimer
-                QTimer.singleShot(0, obj.lineEdit().selectAll)
+        elif isinstance(obj, QLineEdit):
+            # QSpinBox 内部输入框双击全选
+            if event.type() == QEvent.Type.MouseButtonDblClick:
+                obj.selectAll()
         elif obj in (self._crawl_max_count, self._crawl_max_pages):
             if event.type() == QEvent.Type.Wheel and obj.hasFocus():
                 delta = event.angleDelta().y()

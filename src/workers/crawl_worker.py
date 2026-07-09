@@ -75,6 +75,7 @@ class CrawlWorker(QThread):
         self._paused = False          # 暂停标志
         self._stopped = False         # 停止标志
         self._is_running = False      # 运行状态
+        self._driver = None           # Selenium driver 引用，供外部清理
 
         # 断点信息
         self._resume_page = 0         # 断点续爬的起始页码
@@ -97,25 +98,32 @@ class CrawlWorker(QThread):
         self._start_time = time.time()
 
         task_id = self._config.task_name  # 简单起见，用任务名做标识
-        self._log_message(f"任务 [{task_id}] 开始爬取, 目标网站={self._config.site}, 目标URL={self._config.target_url}")
+        self._log_message(f"任务 [{task_id}] 开始爬取")
 
         try:
             # ---- Cookie 状态 ----
             if self._config.cookie_file:
-                self._log_message(f"使用 Cookie: {self._config.cookie_file}")
+                self._log_message(f"任务 [{task_id}] 使用 Cookie: {self._config.cookie_file}")
             else:
-                self._log_message("未配置 Cookie，将无登录态爬取")
+                self._log_message(f"任务 [{task_id}] 未配置 Cookie，将无登录态爬取")
 
             # ---- 检查断点 ----
             self._check_resume_point()
             if self._resume_page > 1:
-                self._log_message(f"检测到断点，从第 {self._resume_page} 页继续")
+                self._log_message(f"任务 [{task_id}] 检测到断点，从第 {self._resume_page} 页继续")
 
             # ---- 获取网站适配器 ----
             adapter = get_site_adapter(self._config.site)
             if adapter is None:
                 self._emit_error(f"不支持的网站: {self._config.site}")
                 return
+
+            # Selenium 模式提示（worker 层输出，确保暂停恢复不重复）
+            if adapter.selenium_crawler and self._config.target_url:
+                scrape_cfg = self._config.scrape_config
+                page_limit = scrape_cfg.max_pages or adapter.max_pages_limit
+                if page_limit > 1:
+                    self._log_message(f"任务 [{task_id}] 使用 Selenium 翻页爬取")
 
             # ---- 爬取主循环 ----
             def progress_callback(page_num=None, count=None, total=None, error=None, message=""):
@@ -140,7 +148,10 @@ class CrawlWorker(QThread):
                 }
                 self.progress.emit(progress_data)
 
-            # 调用爬虫引擎（过滤在爬取过程中逐页执行）
+            # 传递 driver 引用，供外部在异常情况下清理浏览器
+            driver_ref: list = []
+            self._driver = driver_ref
+
             reviews, rejected_count = crawl_all_pages(
                 adapter=adapter,
                 cookie_file=self._config.cookie_file,
@@ -151,18 +162,20 @@ class CrawlWorker(QThread):
                 target_url=self._config.target_url,
                 delay_seconds=self._config.scrape_config.delay_seconds,
                 filter_chain=self._filter_chain,
+                task_name=task_id,
+                driver_ref=driver_ref,
             )
 
             self._reviews = reviews
             if rejected_count > 0:
                 self._log_message(
-                    f"过滤统计: 通过 {len(reviews)} 条，过滤掉 {rejected_count} 条"
+                    f"任务 [{task_id}] 过滤统计: 通过 {len(reviews)} 条，过滤掉 {rejected_count} 条"
                 )
 
             # ---- 下载评论图片到本地 ----
             # 如果用户勾选了"移除图片"，跳过下载
             if self._config.filter_config.remove_images:
-                self._log_message("已启用移除图片，跳过图片下载")
+                self._log_message(f"任务 [{task_id}] 已启用移除图片，跳过图片下载")
             elif not self._stopped and self._reviews:
                 try:
                     from src.engine.image_downloader import download_images_for_task
@@ -208,7 +221,7 @@ class CrawlWorker(QThread):
             )
 
         except Exception as e:
-            logger.exception("爬取线程异常")
+            logger.exception(f"任务 [{task_id}] 爬取线程异常")
             self._emit_error(f"爬取异常: {e}")
 
         finally:
@@ -219,18 +232,18 @@ class CrawlWorker(QThread):
     def pause(self) -> None:
         """暂停爬取任务"""
         self._paused = True
-        self._log_message("任务已暂停")
+        self._log_message(f"任务 [{self._config.task_name}] 已暂停")
 
     def resume(self) -> None:
         """恢复暂停的爬取任务"""
         self._paused = False
-        self._log_message("任务已恢复")
+        self._log_message(f"任务 [{self._config.task_name}] 已恢复")
 
     def stop(self) -> None:
         """停止爬取任务"""
         self._stopped = True
         self._paused = False
-        self._log_message("任务正在停止...")
+        self._log_message(f"任务 [{self._config.task_name}] 正在停止...")
 
     @property
     def is_running(self) -> bool:

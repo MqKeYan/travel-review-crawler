@@ -9,7 +9,10 @@
 
 import logging
 
-from src.sites import get_site_adapter, get_preset_sites
+from src.sites import (
+    get_site_adapter, get_preset_sites,
+    get_crawl_types, get_sites_by_crawl_type,
+)
 
 logger = logging.getLogger("tour-crawler.site_service")
 
@@ -32,7 +35,7 @@ class SiteService:
             >>> service.get_preset_sites()
             [
                 {"name": "ctrip", "display_name": "携程", "domain": ".ctrip.com"},
-                {"name": "dianping", "display_name": "大众点评", "domain": ".dianping.com"},
+                {"name": "ctrip", "display_name": "携程", "domain": ".ctrip.com"},
             ]
         """
         return get_preset_sites()
@@ -57,6 +60,27 @@ class SiteService:
             "domain": adapter.domain,
             "login_url": adapter.login_url,
         }
+
+    def get_crawl_types(self) -> list[dict]:
+        """
+        获取所有爬取类型列表。
+
+        Returns:
+            爬取类型信息列表，每项包含 key 和 display_name
+        """
+        return get_crawl_types()
+
+    def get_sites_by_crawl_type(self, crawl_type: str) -> list[dict]:
+        """
+        获取指定爬取类型下的站点列表。
+
+        Args:
+            crawl_type: 爬取类型标识
+
+        Returns:
+            站点信息字典列表
+        """
+        return get_sites_by_crawl_type(crawl_type)
 
     def validate_site(self, site_name: str) -> bool:
         """

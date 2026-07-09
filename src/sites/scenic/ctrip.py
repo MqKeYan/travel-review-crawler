@@ -232,15 +232,9 @@ def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
                                   max_count: int = 0, timeout: int = 300,
                                   stop_check=None, progress_callback=None,
                                   cookie_file=None,
-                                  filter_chain=None) -> tuple[list[dict], int]:
-    """
-    通过 Selenium 驱动 Edge 浏览器，翻页爬取携程旅游（vacations.ctrip.com）评论。
-
-    与景点爬虫的区别：
-    - 评论容器选择器：.ct-review-list-item（旅游） vs .commentItem（景点）
-    - 翻页按钮选择器：.ct-review-pagination-next（旅游） vs .ant-pagination-next（景点）
-    - 解析函数：extract_from_vacation_dom（旅游） vs extract_from_dom（景点）
-    """
+                                  filter_chain=None, task_name: str = "",
+                                  driver_ref: list | None = None) -> tuple[list[dict], int]:
+    _prefix = f"任务 [{task_name}] " if task_name else ""
     try:
         from selenium import webdriver
         from selenium.webdriver.edge.options import Options
@@ -248,11 +242,12 @@ def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.common.exceptions import TimeoutException, NoSuchElementException
     except ImportError:
-        logger.error("Selenium 未安装，无法翻页爬取")
-        return [], 0
+        logger.error(f"{_prefix}Selenium 未安装，无法翻页爬取")
+        return [], 0, 0
 
     options = Options()
-    options.add_argument("--headless=new")
+    options.add_argument("--window-position=-32000,-32000")
+    options.add_argument("--disable-software-rasterizer")
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
@@ -260,6 +255,8 @@ def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
     from src.engine.browser import create_edge_driver
 
     driver = create_edge_driver(options)
+    if driver_ref is not None:
+        driver_ref.append(driver)
     all_reviews = []
     total_rejected = 0
 
@@ -269,21 +266,19 @@ def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
 
         for page in range(1, max_pages + 1):
             if stop_check and stop_check():
-                logger.info("Selenium 翻页被外部停止")
+                logger.info(f"{_prefix}Selenium 翻页被外部停止")
                 break
 
             if max_count and len(all_reviews) >= max_count:
-                logger.info(f"已达到目标条数 {max_count}，停止翻页")
+                logger.info(f"{_prefix}已达到目标条数 {max_count}，停止翻页")
                 break
 
-            # 单页超时检测
             page_start = time.time()
 
-            # 等待旅游评论容器加载
             try:
                 wait.until(lambda d: d.find_elements(By.CSS_SELECTOR, '.ct-review-list-item'))
             except TimeoutException:
-                logger.warning(f"第 {page} 页等待评论加载超时")
+                logger.warning(f"{_prefix}第 {page} 页等待评论加载超时")
                 break
 
             time.sleep(1)
@@ -308,9 +303,9 @@ def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
             new_count = len(all_reviews) - before
 
             if filter_chain:
-                logger.info(f"第 {page} 页: 提取 {raw_count} 条 → 过滤后 {len(page_reviews)} 条（累计通过 {len(all_reviews)} 条, 过滤 {total_rejected} 条）")
+                logger.info(f"{_prefix}第 {page} 页: 提取 {raw_count} 条 → 过滤后 {len(page_reviews)} 条（累计通过 {len(all_reviews)} 条, 过滤 {total_rejected} 条）")
             else:
-                logger.info(f"第 {page} 页: 提取 {raw_count} 条（新增 {new_count} 条，累计 {len(all_reviews)} 条）")
+                logger.info(f"{_prefix}第 {page} 页: 提取 {raw_count} 条（新增 {new_count} 条，累计 {len(all_reviews)} 条）")
 
             if progress_callback:
                 progress_callback(
@@ -321,12 +316,10 @@ def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
             if max_count and len(all_reviews) >= max_count:
                 break
 
-            # 单页超时检测
             if time.time() - page_start > timeout:
-                logger.warning(f"第 {page} 页处理超时（{timeout}秒）")
+                logger.warning(f"{_prefix}第 {page} 页处理超时（{timeout}秒）")
                 break
 
-            # 判断是否有下一页
             if page < max_pages:
                 try:
                     next_btn = driver.find_element(
@@ -335,18 +328,20 @@ def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
                     driver.execute_script("arguments[0].click();", next_btn)
                     time.sleep(1.5)
                 except NoSuchElementException:
-                    logger.info("已到末页，翻页结束")
+                    logger.info(f"{_prefix}已到末页，翻页结束")
                     break
             else:
                 break
 
     except Exception as e:
-        logger.error(f"Selenium 翻页异常: {e}")
+        logger.error(f"{_prefix}Selenium 翻页异常: {e}")
     finally:
         try:
             driver.quit()
         except Exception:
             pass
+        if driver_ref is not None:
+            driver_ref.clear()
 
     return all_reviews, total_rejected
 
@@ -369,22 +364,9 @@ def _dedup_reviews(reviews: list[dict]) -> list[dict]:
 def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
                          timeout: int = 300, stop_check=None,
                          progress_callback=None, cookie_file=None,
-                         filter_chain=None) -> tuple[list[dict], int]:
-    """
-    通过 Selenium 驱动 Edge 浏览器，点击「下一页」翻页爬取携程评论。
-
-    Args:
-        url: 景点页面 URL
-        max_pages: 最大翻页数
-        max_count: 最大条数限制（过滤后，0 表示不限）
-        timeout: 单页超时秒数
-        stop_check: 停止检测回调，返回 True 时中断翻页
-        progress_callback: 进度回调 (page_num, count, total, message)
-        filter_chain: 过滤器责任链，逐页过滤
-
-    Returns:
-        (去重且过滤后的评论列表, 被过滤掉的条数)
-    """
+                         filter_chain=None, task_name: str = "",
+                         driver_ref: list | None = None) -> tuple[list[dict], int]:
+    _prefix = f"任务 [{task_name}] " if task_name else ""
     try:
         from selenium import webdriver
         from selenium.webdriver.edge.options import Options
@@ -393,11 +375,12 @@ def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
         from selenium.webdriver.support import expected_conditions as EC
         from selenium.common.exceptions import TimeoutException, NoSuchElementException
     except ImportError:
-        logger.error("Selenium 未安装，无法翻页爬取")
-        return []
+        logger.error(f"{_prefix}Selenium 未安装，无法翻页爬取")
+        return [], 0
 
     options = Options()
-    options.add_argument("--headless=new")  # 无头模式，后台静默运行
+    options.add_argument("--window-position=-32000,-32000")
+    options.add_argument("--disable-software-rasterizer")
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
@@ -405,6 +388,8 @@ def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
     from src.engine.browser import create_edge_driver
 
     driver = create_edge_driver(options)
+    if driver_ref is not None:
+        driver_ref.append(driver)
     all_reviews = []
     total_rejected = 0
 
@@ -415,12 +400,12 @@ def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
         for page in range(1, max_pages + 1):
             # 检查外部停止请求
             if stop_check and stop_check():
-                logger.info("Selenium 翻页被外部停止")
+                logger.info(f"{_prefix}Selenium 翻页被外部停止")
                 break
 
             # 检查是否达到最大条数（过滤后计数）
             if max_count and len(all_reviews) >= max_count:
-                logger.info(f"已达到目标条数 {max_count}，停止翻页")
+                logger.info(f"{_prefix}已达到目标条数 {max_count}，停止翻页")
                 break
 
             # 单页超时检测
@@ -430,7 +415,7 @@ def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
             try:
                 wait.until(lambda d: d.find_elements(By.CSS_SELECTOR, ".commentItem"))
             except TimeoutException:
-                logger.warning(f"第 {page} 页等待评论加载超时")
+                logger.warning(f"{_prefix}第 {page} 页等待评论加载超时")
                 break
 
             time.sleep(1)  # 额外等待渲染完成
@@ -461,9 +446,9 @@ def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
             new_count = len(all_reviews) - before
 
             if filter_chain:
-                logger.info(f"第 {page} 页: 提取 {raw_count} 条 → 过滤后 {len(page_reviews)} 条（累计通过 {len(all_reviews)} 条, 过滤 {total_rejected} 条）")
+                logger.info(f"{_prefix}第 {page} 页: 提取 {raw_count} 条 → 过滤后 {len(page_reviews)} 条（累计通过 {len(all_reviews)} 条, 过滤 {total_rejected} 条）")
             else:
-                logger.info(f"第 {page} 页: 提取 {raw_count} 条（新增 {new_count} 条，累计 {len(all_reviews)} 条）")
+                logger.info(f"{_prefix}第 {page} 页: 提取 {raw_count} 条（新增 {new_count} 条，累计 {len(all_reviews)} 条）")
 
             # 每页回传进度（过滤后计数）
             if progress_callback:
@@ -478,30 +463,30 @@ def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
 
             # 单页超时检测
             if time.time() - page_start > timeout:
-                logger.warning(f"第 {page} 页处理超时（{timeout}秒）")
+                logger.warning(f"{_prefix}第 {page} 页处理超时（{timeout}秒）")
                 break
 
             # 判断是否还有下一页
             if page < max_pages:
                 try:
                     next_btn = driver.find_element(By.CSS_SELECTOR, ".ant-pagination-next:not(.ant-pagination-disabled)")
-                    # 用 JavaScript 点击，避免元素被遮挡
                     driver.execute_script("arguments[0].click();", next_btn)
-                    # 等待新评论加载（评论数增加或内容变化）
                     time.sleep(1.5)
                 except NoSuchElementException:
-                    logger.info("已到末页，翻页结束")
+                    logger.info(f"{_prefix}已到末页，翻页结束")
                     break
             else:
                 break
 
     except Exception as e:
-        logger.error(f"Selenium 翻页异常: {e}")
+        logger.error(f"{_prefix}Selenium 翻页异常: {e}")
     finally:
         try:
             driver.quit()
         except Exception:
             pass
+        if driver_ref is not None:
+            driver_ref.clear()
 
     return all_reviews, total_rejected
 
@@ -533,12 +518,10 @@ def _validate_ctrip_url(url: str) -> tuple[bool, str]:
 def _route_ctrip_crawler(url: str, max_pages: int = 10, max_count: int = 0,
                          timeout: int = 300, stop_check=None,
                          progress_callback=None, cookie_file=None,
-                         filter_chain=None) -> tuple[list[dict], int]:
+                         filter_chain=None, task_name: str = "",
+                         driver_ref: list | None = None) -> tuple[list[dict], int]:
     """
     根据 URL 自动分发到景点爬虫或旅游爬虫。
-
-    - vacations.ctrip.com → 旅游爬虫
-    - you.ctrip.com / 其他 → 景点爬虫
     """
     from urllib.parse import urlparse
     try:
@@ -551,15 +534,16 @@ def _route_ctrip_crawler(url: str, max_pages: int = 10, max_count: int = 0,
             url=url, max_pages=max_pages, max_count=max_count,
             timeout=timeout, stop_check=stop_check,
             progress_callback=progress_callback, cookie_file=cookie_file,
-            filter_chain=filter_chain,
+            filter_chain=filter_chain, task_name=task_name,
+            driver_ref=driver_ref,
         )
 
-    # 默认走景点爬虫（兼容 you.ctrip.com 及所有旧 URL）
     return selenium_crawl_ctrip(
         url=url, max_pages=max_pages, max_count=max_count,
         timeout=timeout, stop_check=stop_check,
         progress_callback=progress_callback, cookie_file=cookie_file,
-        filter_chain=filter_chain,
+        filter_chain=filter_chain, task_name=task_name,
+        driver_ref=driver_ref,
     )
 
 
@@ -591,13 +575,14 @@ def create_ctrip_adapter() -> SiteAdapter:
     return SiteAdapter(
         site_name="ctrip",
         site_display_name="携程",
+        crawl_type="scenic",
         domain=".ctrip.com",
         login_url="https://passport.ctrip.com/user/login",
         url_template="https://you.ctrip.com/sight/{id}.html",
         http_method=HttpMethod.GET,
         page_size=10,
         page_start=1,
-        max_pages_limit=100,
+        max_pages_limit=99999,
         review_selector="",
         custom_extractor=None,
         raw_html_parser=extract_reviews_from_html,

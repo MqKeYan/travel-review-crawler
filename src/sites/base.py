@@ -32,8 +32,9 @@ class SiteAdapter:
     适配器只包含配置数据，不包含业务逻辑——解析逻辑统一由基类的 parse_response 实现。
 
     Attributes:
-        site_name: 网站标识（如 "ctrip"、"dianping"）
+        site_name: 网站标识（如 "ctrip"、"fliggy"）
         site_display_name: 用户可见的显示名称（如 "携程"）
+        crawl_type: 爬取类型标识（"scenic" / "shopping" / "hotel"）
         domain: 网站 Cookie 域名（如 ".ctrip.com"）
         login_url: 登录页 URL（用于自动拉起浏览器）
 
@@ -52,9 +53,10 @@ class SiteAdapter:
     # === 基础信息 ===
     site_name: str = ""
     site_display_name: str = ""
+    crawl_type: str = ""    # 爬取类型标识："scenic" / "shopping" / "hotel"
     domain: str = ""
     login_url: str = ""
-    url_template: str = ""  # 从ID构造URL的模板，如 "https://www.dianping.com/shop/{id}"
+    url_template: str = ""  # 从ID构造URL的模板，如 "https://www.ctrip.com/..."
 
     # === 请求参数 ===
     http_method: HttpMethod = HttpMethod.GET
@@ -62,7 +64,7 @@ class SiteAdapter:
     # === 分页参数 ===
     page_size: int = 20
     page_start: int = 1
-    max_pages_limit: int = 100
+    max_pages_limit: int = 99999
 
     # === 字段映射：网站原始字段 → 标准字段 ===
     field_mapping: dict = field(default_factory=lambda: {

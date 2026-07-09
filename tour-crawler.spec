@@ -168,6 +168,10 @@ a = Analysis(
         'PIL', 'numpy',
         # ---- 系统监控（CPU/内存） ----
         'psutil',
+        # ---- 站点适配器子包（动态 __import__ 加载，PyInstaller 无法追踪） ----
+        'src.sites.scenic', 'src.sites.scenic.ctrip', 'src.sites.scenic.fliggy',
+        'src.sites.shopping',
+        'src.sites.hotel', 'src.sites.hotel.ctrip_hotel',
         # ---- 并发执行（图片下载线程池） ----
         'concurrent.futures',
         # ---- Windows 多进程支持（freeze_support） ----

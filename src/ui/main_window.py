@@ -147,7 +147,10 @@ class MainWindow(QMainWindow):
         self._home_page.setMinimumWidth(600)
         self._task_page = TaskPage()
         self._task_page.setMinimumWidth(600)
-        self._create_task_page = CreateTaskPage(self._site_service.get_preset_sites())
+        self._create_task_page = CreateTaskPage(
+            self._site_service.get_crawl_types(),
+            self._site_service.get_preset_sites()
+        )
         self._create_task_page.setMinimumWidth(600)
         self._data_page = DataPage()
         self._data_page.setMinimumWidth(600)
@@ -378,8 +381,10 @@ class MainWindow(QMainWindow):
         existing = list(self._task_service._tasks.keys())
         self._create_task_page.set_existing_tasks(existing)
         # 传入参数默认值（直接从磁盘读取，确保与设置页同步）
-        defaults = self._system_service.get_setting("crawl", {})
-        self._create_task_page.set_defaults(dict(defaults))
+        defaults = {}
+        defaults.update(self._system_service.get_setting("crawl", {}))
+        defaults.update(self._system_service.get_setting("notify", {}))
+        self._create_task_page.set_defaults(defaults)
         # 重置表单为默认状态
         self._create_task_page.reset_form()
         # 在索引 1（任务页）之后插入新建页面
@@ -400,7 +405,7 @@ class MainWindow(QMainWindow):
         # 刷新任务列表
         self._refresh_task_list()
 
-        logger.info(f"任务创建成功: {task.task_name}")
+        logger.info(f"任务 [{task.task_name}] 创建成功")
 
     def _on_create_task_cancel(self) -> None:
         """取消创建任务"""
@@ -409,26 +414,32 @@ class MainWindow(QMainWindow):
         self._sidebar.set_active(0)
 
     def _on_task_start(self, task_name: str) -> None:
-        """启动任务"""
+        """启动或恢复任务"""
         worker = self._task_service.start_task(task_name)
         if worker:
-            # 必须在 worker.start() 之前连接所有 Signal
-            worker.progress.connect(
-                lambda data, tn=task_name: self._on_progress(tn, data)
-            )
-            worker.complete.connect(
-                lambda result, tn=task_name: self._on_task_complete(tn, result)
-            )
-            worker.error.connect(
-                lambda msg, tn=task_name: self._on_task_error(tn, msg)
-            )
-            worker.start()  # 连接完信号后再启动线程
+            if worker.isRunning():
+                # 暂停恢复：线程仍在运行，只需解除暂停
+                worker.resume()
+            else:
+                # 新任务：连接信号并启动线程
+                worker.progress.connect(
+                    lambda data, tn=task_name: self._on_progress(tn, data)
+                )
+                worker.complete.connect(
+                    lambda result, tn=task_name: self._on_task_complete(tn, result)
+                )
+                worker.error.connect(
+                    lambda msg, tn=task_name: self._on_task_error(tn, msg)
+                )
+                worker.start()
             self._refresh_task_list()
+            self._task_page.refresh_detail()
 
     def _on_task_pause(self, task_name: str) -> None:
         """暂停任务"""
         self._task_service.pause_task(task_name)
         self._refresh_task_list()
+        self._task_page.refresh_detail()  # 刷新详情按钮状态
 
     def _on_task_stop(self, task_name: str) -> None:
         """停止任务 → 提前完成（收集已爬取的数据）"""
@@ -445,13 +456,14 @@ class MainWindow(QMainWindow):
             self._data_service.add_reviews(task_name, passed)
 
         self._refresh_task_list()
+        self._task_page.refresh_detail()
 
     def _on_task_delete(self, task_name: str) -> None:
         """删除任务"""
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("确认删除")
         msg_box.setText(f"确定要删除任务「{task_name}」及其数据吗？")
-        msg_box.setIcon(QMessageBox.Icon.Question)
+        msg_box.setIcon(QMessageBox.Icon.NoIcon)
         yes_btn = msg_box.addButton("确定删除", QMessageBox.ButtonRole.YesRole)
         msg_box.addButton("取消", QMessageBox.ButtonRole.NoRole)
         msg_box.exec()
@@ -489,6 +501,7 @@ class MainWindow(QMainWindow):
                     self._data_service.add_reviews(task_name, reviews)
                 logger.info(f"任务 [{task_name}] 线程已退出（状态={task.status.value}），收集 {count} 条数据")
                 self._refresh_task_list()
+                self._task_page.refresh_detail()
                 return
             task.status = TaskStatus.COMPLETED
             task.total_reviews = count
@@ -520,14 +533,19 @@ class MainWindow(QMainWindow):
             self._notifier.notify_complete(task_name, count, elapsed)
 
             # 记录统计
-            self._stats_service.record_task_completed(count, task.site)
+            self._stats_service.record_task_completed(count, task.site, task_name)
 
         # 清理 worker（无论任务是否存在都要清理）
+        worker = None
         with self._task_service._lock:
-            self._task_service._workers.pop(task_name, None)
+            worker = self._task_service._workers.pop(task_name, None)
+        # 等待底层线程彻底结束，防止 QThread 销毁警告
+        if worker:
+            worker.wait()
 
         # 刷新任务列表
         self._refresh_task_list()
+        self._task_page.refresh_detail()
 
         logger.info(f"任务 [{task_name}] 完成，共 {count} 条，耗时 {elapsed}")
 
@@ -536,9 +554,13 @@ class MainWindow(QMainWindow):
         task = self._task_service.get_task(task_name)
         # 已被用户手动停止，忽略后续错误
         if task and task.status == TaskStatus.CANCELLED:
+            worker = None
             with self._task_service._lock:
-                self._task_service._workers.pop(task_name, None)
+                worker = self._task_service._workers.pop(task_name, None)
+            if worker:
+                worker.wait()
             self._refresh_task_list()
+            self._task_page.refresh_detail()
             return
         if task:
             task.status = TaskStatus.ERROR
@@ -563,10 +585,14 @@ class MainWindow(QMainWindow):
         self._stats_service.record_task_error()
 
         # 清理 worker
+        worker = None
         with self._task_service._lock:
-            self._task_service._workers.pop(task_name, None)
+            worker = self._task_service._workers.pop(task_name, None)
+        if worker:
+            worker.wait()
 
         self._refresh_task_list()
+        self._task_page.refresh_detail()
 
     def _refresh_home_system_info(self) -> None:
         """每秒刷新首页系统信息（运行时间等动态数据）"""
@@ -712,7 +738,7 @@ class MainWindow(QMainWindow):
     # ==================== 数据导出 ====================
 
     def _refresh_data_page(self) -> None:
-        """刷新数据页面的任务列表，并自动加载第一个任务的数据到表格"""
+        """刷新数据页面的任务列表，用户选择任务后才加载数据"""
         task_names = self._data_service.get_all_tasks_with_data()
         tasks_info = []
         for name in task_names:
@@ -720,13 +746,6 @@ class MainWindow(QMainWindow):
             tasks_info.append({"name": name, "count": stats.total})
 
         self._data_page.update_task_list(tasks_info)
-
-        # 自动加载第一个有数据的任务到表格
-        if task_names:
-            first_task = task_names[0]
-            page_result = self._data_service.get_reviews(first_task, page=1, size=500)
-            stats = self._data_service.get_stats(first_task)
-            self._data_page.set_reviews(first_task, page_result.items, stats)
 
     def _on_data_task_selected(self, task_name: str) -> None:
         """数据页面任务选择变化，加载对应数据到表格"""
@@ -758,11 +777,9 @@ class MainWindow(QMainWindow):
         default_ext = f".{formats[0]}" if formats else ".xlsx"
 
         # 弹出 Windows 原生保存对话框（默认定位到导出目录）
-        import time
         from src.utils.paths import get_exports_dir
         exports_dir = str(get_exports_dir())
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        default_name = f"{exports_dir}/评论数据_{task_name}_{timestamp}"
+        default_name = f"{exports_dir}/{task_name}"
         save_path, _ = QFileDialog.getSaveFileName(
             self, "导出评论数据", default_name, fmt_filter,
         )
@@ -813,23 +830,48 @@ class MainWindow(QMainWindow):
         msg_box.setText(
             "确定要清空累计统计数据吗？\n\n"
             "• 累计完成任务数、评论数、运行时长将被清零\n"
-            "• 爬虫评论数据在关闭软件时自动清理，不受影响\n"
-            "• 导出过的文件不会被删除\n"
+            "• 导出过的文件和图片不会被删除\n"
             "• Cookie 和设置不会被影响\n\n"
             "此操作不可恢复！"
         )
-        msg_box.setIcon(QMessageBox.Icon.Warning)
+        msg_box.setIcon(QMessageBox.Icon.NoIcon)
         yes_btn = msg_box.addButton("确定清空", QMessageBox.ButtonRole.YesRole)
         msg_box.addButton("取消", QMessageBox.ButtonRole.NoRole)
+        # 按钮居中
+        from PySide6.QtWidgets import QDialogButtonBox
+        btn_box = msg_box.findChild(QDialogButtonBox)
+        if btn_box:
+            btn_box.setCenterButtons(True)
         msg_box.exec()
         if msg_box.clickedButton() != yes_btn:
             return
 
+        # 清空任务记录（内存 + 磁盘）
+        self._task_service._tasks.clear()
+        self._task_service._save_to_disk()
+        from src.utils.paths import get_tasks_dir
+        for f in get_tasks_dir().glob("*.json"):
+            try:
+                f.unlink()
+            except Exception:
+                pass
+        # 清除日志文件
+        import shutil
+        from src.utils.paths import get_data_dir
+        log_dir = get_data_dir() / "logs"
+        if log_dir.exists():
+            shutil.rmtree(log_dir)
+            log_dir.mkdir()
         # 重置累计统计数据
         self._stats_service.reset()
-        # 刷新首页系统信息
+        self._refresh_task_list()
         self._refresh_home_system_info()
-        QMessageBox.information(self, "提示", "累计统计数据已清空")
+        box = QMessageBox(self)
+        box.setWindowTitle("提示")
+        box.setText("数据已清空，请手动重启软件")
+        box.setIcon(QMessageBox.Icon.NoIcon)
+        box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        box.exec()
 
     def _on_reset_settings(self) -> None:
         """还原所有设置为默认值"""
@@ -842,7 +884,7 @@ class MainWindow(QMainWindow):
             "• Cookie 和数据不会被影响\n\n"
             "此操作不可恢复！"
         )
-        msg_box.setIcon(QMessageBox.Icon.Warning)
+        msg_box.setIcon(QMessageBox.Icon.NoIcon)
         yes_btn = msg_box.addButton("确定还原", QMessageBox.ButtonRole.YesRole)
         msg_box.addButton("取消", QMessageBox.ButtonRole.NoRole)
         msg_box.exec()
@@ -852,12 +894,17 @@ class MainWindow(QMainWindow):
         from src.services.system_service import DEFAULT_SETTINGS
         self._system_service.update_settings(DEFAULT_SETTINGS)
         self._refresh_settings_page()
-        QMessageBox.information(self, "提示", "设置已还原为默认值，部分更改需重启生效")
+        box = QMessageBox(self)
+        box.setWindowTitle("提示")
+        box.setText("设置已还原为默认值，请手动重启软件")
+        box.setIcon(QMessageBox.Icon.NoIcon)
+        box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        box.exec()
 
     def _on_reinitialize(self) -> None:
         """重新初始化（清空全部数据 + 还原设置 + 删除 Cookie）"""
         msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("⚠ 确认重新初始化")
+        msg_box.setWindowTitle("确认初始化")
         msg_box.setText(
             "确定要重新初始化软件吗？\n\n"
             "以下内容将被删除/重置：\n"
@@ -869,16 +916,26 @@ class MainWindow(QMainWindow):
             "• 已导出的文件\n\n"
             "此操作相当于首次使用软件，不可恢复！"
         )
-        msg_box.setIcon(QMessageBox.Icon.Critical)
-        yes_btn = msg_box.addButton("确定重新初始化", QMessageBox.ButtonRole.YesRole)
+        msg_box.setIcon(QMessageBox.Icon.NoIcon)
+        yes_btn = msg_box.addButton("确定初始化", QMessageBox.ButtonRole.YesRole)
         msg_box.addButton("取消", QMessageBox.ButtonRole.NoRole)
+        from PySide6.QtWidgets import QDialogButtonBox
+        btn_box = msg_box.findChild(QDialogButtonBox)
+        if btn_box:
+            btn_box.setCenterButtons(True)
         msg_box.exec()
         if msg_box.clickedButton() != yes_btn:
             return
 
-        # 清空任务记录
+        # 清空任务记录（内存 + 磁盘）
         self._task_service._tasks.clear()
         self._task_service._save_to_disk()
+        from src.utils.paths import get_tasks_dir
+        for f in get_tasks_dir().glob("*.json"):
+            try:
+                f.unlink()
+            except Exception:
+                pass
         # 重置统计
         self._stats_service.reset()
         # 删除所有 Cookie
@@ -886,14 +943,24 @@ class MainWindow(QMainWindow):
         # 重置设置
         from src.services.system_service import DEFAULT_SETTINGS
         self._system_service.update_settings(DEFAULT_SETTINGS)
+        # 清理日志
+        import shutil
+        from src.utils.paths import get_data_dir
+        d = get_data_dir() / "logs"
+        if d.exists():
+            shutil.rmtree(d)
+            d.mkdir()
 
         self._refresh_task_list()
         self._refresh_data_page()
         self._refresh_settings_page()
         self._refresh_home_system_info()
-        QMessageBox.information(self, "提示", "软件已重新初始化，即将退出")
-        self.close()
-        QApplication.quit()
+        box = QMessageBox(self)
+        box.setWindowTitle("提示")
+        box.setText("软件已初始化，请手动重启软件")
+        box.setIcon(QMessageBox.Icon.NoIcon)
+        box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        box.exec()
 
     def _refresh_settings_page(self) -> None:
         """刷新设置页面"""
@@ -981,7 +1048,7 @@ class MainWindow(QMainWindow):
                 f"当前有 {len(unexported)} 个任务的数据未导出，"
                 "关闭后数据将丢失。是否继续关闭？"
             )
-            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setIcon(QMessageBox.Icon.NoIcon)
             yes_btn = msg_box.addButton("继续关闭", QMessageBox.ButtonRole.YesRole)
             msg_box.addButton("取消关闭", QMessageBox.ButtonRole.NoRole)
             msg_box.exec()
@@ -1008,53 +1075,44 @@ class MainWindow(QMainWindow):
             if task.status in (TaskStatus.RUNNING, TaskStatus.PAUSED):
                 self._task_service.stop_task(task_name, complete_early=True)
 
-        # 第三步：等待所有工作线程退出（最多等待 8 秒）
-        max_wait_ms = 8000
+        # 第三步：等待所有工作线程退出（最多等待 15 秒，给 driver.quit() 足够时间）
         for task_name, worker in list(self._task_service._workers.items()):
             if worker.isRunning():
                 logger.info(f"等待工作线程 [{task_name}] 退出...")
-                if not worker.wait(min(max_wait_ms, 3000)):
-                    logger.warning(f"工作线程 [{task_name}] 未能在 3 秒内退出，强制终止")
-                    worker.terminate()
-                    worker.wait(2000)  # 等待 terminate 生效
-                max_wait_ms -= 3000
-                if max_wait_ms <= 0:
-                    # 超时保护：不再等待剩余线程，直接强制终止
-                    break
+                if not worker.wait(5000):
+                    logger.warning(f"工作线程 [{task_name}] 未能在 5 秒内退出，尝试关闭浏览器")
+                    # 尝试通过 driver 引用关闭浏览器
+                    try:
+                        drv_list = worker._driver
+                        if drv_list and drv_list[0] is not None:
+                            drv_list[0].quit()
+                    except Exception:
+                        pass
+                    worker.wait(3000)
 
-        # 第四步：强制终止剩余未退出的线程
+        # 第四步：强制终止仍卡死的线程
         for task_name, worker in list(self._task_service._workers.items()):
             if worker.isRunning():
-                logger.warning(f"工作线程 [{task_name}] 超时未退出，强制终止")
+                logger.warning(f"工作线程 [{task_name}] 强制终止")
+                try:
+                    drv_list = worker._driver
+                    if drv_list and drv_list[0] is not None:
+                        drv_list[0].quit()
+                except Exception:
+                    pass
                 worker.terminate()
                 worker.wait(1000)
 
-        # 清除缓存的评论图片
-        self._clear_cached_images()
+        # 第五步：清理导出工作线程
+        export_worker = self._export_service._current_worker
+        if export_worker and export_worker.isRunning():
+            logger.info("等待导出线程退出...")
+            export_worker.terminate()
+            export_worker.wait(2000)
 
         shutdown_logger()
         event.accept()
 
-    def _clear_cached_images(self) -> None:
-        """
-        清除缓存的评论图片目录。
-
-        软件关闭时自动清理，释放磁盘空间。
-        已导出的文件不受影响。
-        """
-        import shutil
-        from src.utils.paths import get_images_dir
-
-        images_dir = get_images_dir()
-        if not images_dir.exists():
-            return
-
-        try:
-            count = sum(1 for _ in images_dir.rglob("*") if _.is_file())
-            shutil.rmtree(images_dir)
-            logger.info(f"已清除缓存图片: {count} 个文件")
-        except OSError as e:
-            logger.warning(f"清除缓存图片失败: {e}")
 
     def quit_app(self) -> None:
         """退出应用程序（从托盘菜单）。

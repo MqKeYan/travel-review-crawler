@@ -56,12 +56,12 @@ class LogEntry:
         if category == "cookie":
             return "cookie" in name_lower
         elif category == "crawler":
-            # 爬虫核心模块 + 站点适配器（页面提取、翻页等）
+            # 爬虫核心模块 + 站点适配器 + 任务管理 + 通知
             return any(kw in name_lower for kw in (
                 ".crawler", "crawl_worker", "task_service",
-                "captcha_solver", "image_downloader",
-                "sites.ctrip", "sites.fliggy", "sites.dianping",
-                "site_service",
+                "stats_service", "captcha_solver", "image_downloader",
+                "sites.ctrip", "sites.fliggy",
+                "site_service", "notifier",
             ))
         elif category == "export":
             # 导出模块：导出服务、导出工作线程

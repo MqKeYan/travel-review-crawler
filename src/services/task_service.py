@@ -16,7 +16,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional
 
-from src.models.task import Task, TaskConfig, TaskStatus
+from src.models.task import Task, TaskConfig, TaskStatus, TaskProgress
 from src.workers.crawl_worker import CrawlWorker
 from src.utils.paths import get_tasks_dir
 from src.sites import get_site_adapter
@@ -226,7 +226,16 @@ class TaskService:
                 logger.warning(f"任务正在运行中，无法重复启动: {task.status.value}")
                 return None
 
-            # 创建工作线程（不启动，由调用方启动）
+            # 暂停状态 → 恢复，不创建新 worker
+            if task.status == TaskStatus.PAUSED:
+                worker = self._workers.get(task_name)
+                if worker:
+                    task.status = TaskStatus.RUNNING
+                    self._save_to_disk()
+                    logger.info(f"任务 [{task_name}] 恢复爬取")
+                    return worker
+
+            # 新建 worker
             worker = CrawlWorker(task.config)
             self._workers[task_name] = worker
 
@@ -234,7 +243,7 @@ class TaskService:
             task.started_at = time.strftime("%Y-%m-%d %H:%M:%S")
 
         self._save_to_disk()
-        logger.info(f"任务 [{task_name}] 已准备启动")
+        logger.info(f"任务 [{task_name}] 开始爬取")
         return worker
 
     def pause_task(self, task_name: str) -> bool:
@@ -277,7 +286,7 @@ class TaskService:
             worker.resume()
             task.status = TaskStatus.RUNNING
             self._save_to_disk()
-            logger.info(f"任务 [{task_name}] 已恢复")
+            logger.info(f"任务 [{task_name}] 恢复爬取")
             return True
         return False
 

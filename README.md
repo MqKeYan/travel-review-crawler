@@ -14,14 +14,14 @@
 </p>
 
 <p align="center">
-  <strong> 支持携程、飞猪等旅游平台（目前大众点评还在开发适配中），一键爬取景区评论数据 </strong>
+  <strong> 支持携程、飞猪等旅游平台，一键爬取景区评论数据 </strong>
 </p>
 
 ## 功能概览
 
 | 功能 | 说明 |
 |------|------|
-| 🌐 多平台支持 | 携程、飞猪、大众点评，预设站点适配器 |
+| 🌐 多平台支持 | 携程、飞猪，预设站点适配器 |
 | 🍪 Cookie 管理 | 一键拉取系统浏览器（Edge / Chrome / Firefox）的登录 Cookie，按平台分类存储 |
 | 🖼️ 图片下载 | 评论图片多线程下载到本地，DOCX 导出时自动嵌入 |
 | 📤 多格式导出 | TXT · CSV · XLSX · DOCX，支持关键字过滤、图片过滤、纯表情过滤 |
@@ -36,7 +36,6 @@
 |------|----------|-----------|
 | 携程 | requests（首页）+ Selenium 点击翻页（后续页） | 暂未发现需求 |
 | 飞猪 | Selenium 滚动加载 | 滑块自动过 |
-| 大众点评 | — | — |
 
 ## 系统要求
 
@@ -103,12 +102,18 @@ src/                                # 源代码根目录
 │   ├── ua_spoofer.py               # User-Agent 随机伪装池
 │   └── notifier.py                 # 桌面通知 + PushPlus 微信推送
 │
-├── sites/                          # 网站适配器
+├── sites/                          # 网站适配器（按爬取类型/目标网站二级目录）
 │   ├── base.py                     # 抽象基类 SiteAdapter，定义统一接口
-│   ├── ctrip.py                    # 携程适配器：requests 翻页解析
-│   ├── fliggy.py                   # 飞猪适配器：Selenium 滚动加载 + 验证码求解
-│   ├── dianping.py                 # 大众点评适配器：Selenium 翻页 + CSS/SVG 字体解密
-│   └── __init__.py                 # 适配器注册表 get_site_adapter()
+│   ├── __init__.py                 # 适配器注册表 + URL 自动识别爬取类型
+│   ├── scenic/                     # 旅游景点分类
+│   │   ├── __init__.py             # register_adapters() 聚合入口
+│   │   ├── ctrip.py                # 携程景区：requests 首页 + Selenium 翻页
+│   │   └── fliggy.py               # 飞猪景区：Selenium 滚动加载 + 滑块验证码
+│   ├── hotel/                      # 酒店民宿分类
+│   │   ├── __init__.py             # register_adapters() 聚合入口
+│   │   └── ctrip_hotel.py          # 携程酒店：requests 首页 + Selenium 翻页
+│   └── shopping/                   # 购物网站分类（预留）
+│       └── __init__.py             # register_adapters() 返回空字典
 │
 ├── ui/                             # PySide6 桌面界面层
 │   ├── main_window.py              # 暗夜绿三栏主窗口 + QSystemTrayIcon 系统托盘

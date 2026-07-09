@@ -81,8 +81,6 @@ class ReviewTableModel(QAbstractTableModel):
         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
             if section < len(self._headers):
                 return self._headers[section]
-        if orientation == Qt.Orientation.Vertical and role == Qt.ItemDataRole.DisplayRole:
-            return section + 1  # 行号从 1 开始
         return None
 
     def update_data(self, reviews: ReviewList) -> None:
@@ -147,6 +145,8 @@ class DataTable(QWidget):
             "QSpinBox::down-button { width: 0px; }"
         )
         self._page_spin.installEventFilter(self)
+        # 监听内部输入框的鼠标事件，实现点击空白/双击全选
+        self._page_spin.lineEdit().installEventFilter(self)
         self._page_spin.valueChanged.connect(self._go_to_page)
 
         toolbar.addWidget(self._search_input)
@@ -174,6 +174,7 @@ class DataTable(QWidget):
         self._table_view.horizontalHeader().setStretchLastSection(True)  # 末列拉伸填满，无水平滚动条
         self._table_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self._table_view.verticalHeader().setDefaultSectionSize(36)
+        self._table_view.verticalHeader().setVisible(False)  # 隐藏序号列
 
         layout.addWidget(self._table_view)
         self.setLayout(layout)
@@ -282,8 +283,10 @@ class DataTable(QWidget):
             self._update_page()
 
     def eventFilter(self, obj, event):
-        """禁用页码框的鼠标滚轮"""
+        """禁用页码框的鼠标滚轮 + 内部输入框双击全选"""
         if obj is self._page_spin and event.type() == QEvent.Type.Wheel:
             event.ignore()
             return True
+        if obj is self._page_spin.lineEdit() and event.type() == QEvent.Type.MouseButtonDblClick:
+            obj.selectAll()
         return super().eventFilter(obj, event)

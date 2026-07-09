@@ -134,7 +134,8 @@ class TaskConfig:
 
     Attributes:
         task_name: 任务名称（用户自定义，如 "黄山风景区评论"）
-        site: 网站标识（"ctrip"、"dianping" 等）
+        crawl_type: 爬取类型标识（"scenic" / "shopping" / "hotel"）
+        site: 网站标识（"ctrip"、"fliggy" 等）
         target_url: 目标景区评论页面 URL
         cookie_file: Cookie 文件名（如 "ctrip.json"），空则不使用 Cookie
         scrape_config: 爬取范围配置
@@ -143,6 +144,7 @@ class TaskConfig:
         notify_config: 通知配置
     """
     task_name: str = ""
+    crawl_type: str = ""  # 爬取类型标识
     site: str = ""
     target_url: str = ""
     cookie_file: str = ""
@@ -301,6 +303,7 @@ class Task:
 
         task_config = TaskConfig(
             task_name=data.get("task_name", ""),
+            crawl_type=cfg.get("crawl_type", ""),
             site=data.get("site", ""),
             target_url=data.get("target_url", ""),
             cookie_file=cfg.get("cookie_file", ""),

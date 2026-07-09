@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
 )
 from PySide6.QtCore import Qt, Signal, QEvent
-from PySide6.QtGui import QFont, QIntValidator
+from PySide6.QtGui import QFont, QIntValidator, QPainter, QColor
 
 from src.models.task import (
     TaskConfig, ScrapeConfig, FilterConfig,
@@ -24,24 +24,96 @@ from src.models.task import (
 from src.utils.paths import get_cookie_platform_dir
 
 
-def normalize_date(date_str: str) -> str:
-    text = date_str.strip()
+
+def _parse_date_parts(text: str) -> tuple[int, int, int]:
+    """解析日期字符串为 (年, 月, 日)，缺失部分返回 0。
+    支持格式：2026 / 2026-07 / 2026-07-10"""
+    text = text.strip()
     if not text:
-        return ""
+        return (0, 0, 0)
     for sep in ("/", "."):
         text = text.replace(sep, "-")
-    return text
+    parts = text.split("-")
+    try:
+        y = int(parts[0]) if len(parts) >= 1 and parts[0] else 0
+        m = int(parts[1]) if len(parts) >= 2 and parts[1] else 0
+        d = int(parts[2]) if len(parts) >= 3 and parts[2] else 0
+    except ValueError:
+        return (0, 0, 0)
+    return (y, m, d)
+
+
+def _validate_date_text(text: str) -> bool:
+    """校验日期文本：仅允许 年 / 年-月 / 年-月-日，禁止 年-日 或仅有 月/日"""
+    y, m, d = _parse_date_parts(text)
+    if y == 0:
+        if m != 0 or d != 0:
+            return False  # 仅设置了月或日，没有年
+        return True  # 全部为空
+    if m == 0 and d != 0:
+        return False  # 年-日，不允许
+    return True
+
+
+def _build_from_date_text(text: str) -> str | None:
+    """起始日期文本→标准日期：年→年初，年-月→月初，年-月-日→当天"""
+    y, m, d = _parse_date_parts(text)
+    if y == 0:
+        return None
+    if m == 0:
+        return f"{y}-01-01"
+    if d == 0:
+        return f"{y}-{m:02d}-01"
+    return f"{y}-{m:02d}-{d:02d}"
+
+
+def _build_to_date_text(text: str) -> str | None:
+    """结束日期文本→标准日期：年→年末，年-月→月末，年-月-日→当天"""
+    import calendar
+    y, m, d = _parse_date_parts(text)
+    if y == 0:
+        return None
+    if m == 0:
+        return f"{y}-12-31"
+    if d == 0:
+        last_day = calendar.monthrange(y, m)[1]
+        return f"{y}-{m:02d}-{last_day:02d}"
+    return f"{y}-{m:02d}-{d:02d}"
 
 
 class _SelectAllLineEdit(QLineEdit):
-    def mousePressEvent(self, event):
-        super().mousePressEvent(event)
+    """双击全选文本"""
+    def mouseDoubleClickEvent(self, event):
+        super().mouseDoubleClickEvent(event)
         self.selectAll()
 
 
 class _SiteComboBox(QComboBox):
+    """QComboBox 子类，paintEvent 绘制灰色 placeholder 文字。"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._placeholder = ""
+
+    def setPlaceholderText(self, text: str) -> None:
+        self._placeholder = text
+        self.update()
+
     def wheelEvent(self, event):
         event.ignore()
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if self.currentIndex() == -1 and self._placeholder:
+            p = QPainter(self)
+            p.setFont(self.font())
+            p.setPen(QColor("#888888"))
+            p.drawText(
+                self.rect().adjusted(14, 0, -30, 0),
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                self._placeholder,
+            )
+            p.end()
 
 
 class CreateTaskPage(QWidget):
@@ -56,9 +128,11 @@ class CreateTaskPage(QWidget):
         lbl.setStyleSheet("padding: 10px 0px;")
         return lbl
 
-    def __init__(self, sites: list[dict], parent=None):
+    def __init__(self, crawl_types: list[dict], sites: list[dict], parent=None):
         super().__init__(parent)
-        self._sites = sites
+        self._crawl_types = crawl_types
+        self._all_sites = sites
+        self._sites = sites  # 保留兼容（实际使用 _all_sites）
         self._cookie_site: str = ""
         self._has_cookie: bool = False
         self._existing_task_names: set[str] = set()
@@ -76,12 +150,12 @@ class CreateTaskPage(QWidget):
         d = self._defaults
         self._name_input.clear()
         self._name_input.setStyleSheet("")
-        self._name_input.setPlaceholderText("例如: 黄山风景区评论")
-        if self._site_combo.count() > 0:
-            self._site_combo.setCurrentIndex(0)
+        self._name_input.setPlaceholderText("请输入任务名称")
         self._url_input.clear()
         self._url_input.setStyleSheet("")
-        self._url_input.setPlaceholderText("输入完整URL或景点ID编号")
+        self._url_input.setPlaceholderText("请输入完整URL或网址ID编号")
+        self._crawl_type_combo.setCurrentIndex(-1)
+        self._site_combo.setCurrentIndex(-1)
         max_count = d.get("default_max_count") or 0
         self._max_count_input.setText(str(max_count) if max_count else "")
         max_pages = d.get("default_max_pages") or 0
@@ -93,10 +167,10 @@ class CreateTaskPage(QWidget):
         self._filter_emoji_cb.setChecked(bool(d.get("default_remove_emoji")))
         self._filter_pure_emoji_cb.setChecked(bool(d.get("default_skip_pure_emoji")))
         self._filter_ad_cb.setChecked(bool(d.get("default_ad_filter")))
-        self._notify_popup_cb.setChecked(False)
-        self._notify_sound_cb.setChecked(False)
-        self._notify_pushplus_input.clear()
-        self._cookie_switch.setCurrentIndex(0)
+        self._notify_popup_cb.setChecked(bool(d.get("default_desktop_popup")))
+        self._notify_sound_cb.setChecked(bool(d.get("default_sound")))
+        self._notify_pushplus_input.setText(d.get("default_pushplus_token", ""))
+        self._cookie_switch.setCurrentIndex(-1)
         self._cookie_label.setText("未使用 Cookie")
         self._cookie_label.setStyleSheet("color: #555555; font-size: 12px;")
         self._has_cookie = False
@@ -122,22 +196,27 @@ class CreateTaskPage(QWidget):
         basic_form.setSpacing(12)
 
         self._name_input = _SelectAllLineEdit()
-        self._name_input.setPlaceholderText("例如: 黄山风景区评论")
+        self._name_input.setPlaceholderText("请输入任务名称")
         basic_form.addRow(self._label("任务名称:"), self._name_input)
 
+        # 爬取类型下拉框（默认空）
+        self._crawl_type_combo = _SiteComboBox()
+        self._crawl_type_combo.setPlaceholderText("请选择爬取类型")
+        for ct in self._crawl_types:
+            self._crawl_type_combo.addItem(ct["display_name"], ct["key"])
+        self._crawl_type_combo.setCurrentIndex(-1)
+        self._crawl_type_combo.currentIndexChanged.connect(self._on_crawl_type_changed)
+        basic_form.addRow(self._label("爬取类型:"), self._crawl_type_combo)
+
+        # 目标网站下拉框（默认空，由爬取类型联动填充）
         self._site_combo = _SiteComboBox()
-        for site in self._sites:
-            self._site_combo.addItem(
-                site.get("display_name", site["name"]),
-                site["name"]
-            )
+        self._site_combo.setPlaceholderText("请选择目标网站")
+        self._site_combo.setCurrentIndex(-1)
         self._site_combo.currentIndexChanged.connect(self._on_site_changed)
-        if self._sites:
-            self._cookie_site = self._sites[0]["name"]
         basic_form.addRow(self._label("目标网站:"), self._site_combo)
 
         self._url_input = _SelectAllLineEdit()
-        self._url_input.setPlaceholderText("输入完整URL或景点ID编号")
+        self._url_input.setPlaceholderText("请输入完整URL或网址ID编号")
         self._url_input.textChanged.connect(self._on_url_changed)
         basic_form.addRow(self._label("目标 URL:"), self._url_input)
 
@@ -149,14 +228,14 @@ class CreateTaskPage(QWidget):
         self._cookie_btn.setObjectName("secondaryBtn")
         self._cookie_btn.setStyleSheet("QPushButton { min-height: 0px; padding: 10px 14px; }")
         self._cookie_btn.clicked.connect(self._on_get_cookie)
-        self._cookie_switch = QComboBox()
-        self._cookie_switch.setMinimumWidth(120)
+        self._cookie_switch = _SiteComboBox()
+        self._cookie_switch.setPlaceholderText("请选择Cookie")
+        self._cookie_switch.setFixedWidth(180)
         self._cookie_switch.setStyleSheet(
             "QComboBox::drop-down { width: 0px; border: none; }"
             "QComboBox::down-arrow { width: 0px; height: 0px; }"
         )
         self._cookie_switch.currentIndexChanged.connect(self._on_cookie_switched)
-        cookie_layout.addWidget(QLabel("使用:"))
         cookie_layout.addWidget(self._cookie_switch)
         cookie_layout.addWidget(self._cookie_btn)
         cookie_layout.addWidget(self._cookie_label)
@@ -200,6 +279,8 @@ class CreateTaskPage(QWidget):
         self._delay_spin.setToolTip("每次请求的等待间隔，越大越慢但越安全")
         self._delay_spin.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._delay_spin.installEventFilter(self)
+        # 监听内部输入框的鼠标事件，实现点击空白/双击全选
+        self._delay_spin.lineEdit().installEventFilter(self)
         delay_row.addWidget(self._delay_spin)
         delay_row.addWidget(QLabel("秒"))
         delay_row.addStretch()
@@ -207,9 +288,9 @@ class CreateTaskPage(QWidget):
 
         date_layout = QHBoxLayout()
         self._date_from = _SelectAllLineEdit()
-        self._date_from.setPlaceholderText("起始日期 (可选)")
+        self._date_from.setPlaceholderText("起始日期  格式: 年-月-日 (可选)")
         self._date_to = _SelectAllLineEdit()
-        self._date_to.setPlaceholderText("结束日期 (可选)")
+        self._date_to.setPlaceholderText("结束日期  格式: 年-月-日 (可选)")
         date_layout.addWidget(QLabel("从"))
         date_layout.addWidget(self._date_from)
         date_layout.addWidget(QLabel("到"))
@@ -248,17 +329,18 @@ class CreateTaskPage(QWidget):
         notify_form = QFormLayout()
         notify_form.setSpacing(10)
 
-        self._notify_popup_cb = QCheckBox("任务完成时桌面弹窗")
-        self._notify_popup_cb.setChecked(False)
-        notify_form.addRow(self._label("桌面通知:"), self._notify_popup_cb)
-
-        self._notify_sound_cb = QCheckBox("任务完成时播放提示音")
-        self._notify_sound_cb.setChecked(False)
-        notify_form.addRow(self._label("声音提示:"), self._notify_sound_cb)
+        notify_check_row = QHBoxLayout()
+        notify_check_row.setSpacing(16)
+        self._notify_popup_cb = QCheckBox("桌面弹窗")
+        self._notify_sound_cb = QCheckBox("声音提示")
+        notify_check_row.addWidget(self._notify_popup_cb)
+        notify_check_row.addWidget(self._notify_sound_cb)
+        notify_check_row.addStretch()
+        notify_form.addRow(self._label("完成通知:"), notify_check_row)
 
         self._notify_pushplus_input = _SelectAllLineEdit()
         self._notify_pushplus_input.setPlaceholderText("输入 PushPlus Token（留空不推送）")
-        notify_form.addRow(self._label("PushPlus Token:"), self._notify_pushplus_input)
+        notify_form.addRow(self._label("PushPlus:"), self._notify_pushplus_input)
 
         notify_group.setLayout(notify_form)
         layout.addWidget(notify_group)
@@ -294,7 +376,6 @@ class CreateTaskPage(QWidget):
 
     def _refresh_cookie_list(self) -> None:
         self._cookie_switch.clear()
-        self._cookie_switch.addItem("-- 不使用 --", "")
         if self._cookie_site:
             platform_dir = get_cookie_platform_dir(self._cookie_site)
             if platform_dir.exists():
@@ -305,16 +386,43 @@ class CreateTaskPage(QWidget):
             idx = self._cookie_switch.findData(self._cookie_site)
             if idx >= 0:
                 self._cookie_switch.setCurrentIndex(idx)
+        else:
+            self._cookie_switch.setCurrentIndex(-1)
+
+    def _on_crawl_type_changed(self) -> None:
+        """爬取类型变更后，筛选目标网站下拉框选项"""
+        crawl_type = self._crawl_type_combo.currentData()
+
+        self._site_combo.blockSignals(True)
+        self._site_combo.clear()
+
+        if crawl_type:
+            for site in self._all_sites:
+                if site.get("crawl_type") == crawl_type:
+                    self._site_combo.addItem(
+                        site.get("display_name", site["name"]),
+                        site["name"]
+                    )
+        self._site_combo.blockSignals(False)
+        self._site_combo.setCurrentIndex(-1)
+
+        # 清空 Cookie 状态
+        self._cookie_site = ""
+        self._has_cookie = False
+        self._cookie_label.setText("未使用 Cookie")
+        self._cookie_label.setStyleSheet("color: #555555; font-size: 12px;")
+        self._refresh_cookie_list()
 
     def _on_site_changed(self) -> None:
         site = self._site_combo.currentData()
-        self._cookie_site = site
+        self._cookie_site = site or ""
         self._has_cookie = False
         self._cookie_label.setText("未使用 Cookie")
         self._cookie_label.setStyleSheet("color: #555555; font-size: 12px;")
         self._refresh_cookie_list()
 
     def _on_url_changed(self, text: str) -> None:
+        """URL 输入后自动识别爬取类型和目标网站"""
         if not text or not text.startswith("http"):
             return
         from urllib.parse import urlparse
@@ -322,15 +430,37 @@ class CreateTaskPage(QWidget):
             host = urlparse(text).netloc.lower()
         except Exception:
             return
-        for idx in range(self._site_combo.count()):
-            site_name = self._site_combo.itemData(idx)
-            site_info = next((s for s in self._sites if s["name"] == site_name), None)
-            if site_info:
-                domain = site_info.get("domain", "")
-                if domain and host.endswith(domain.lstrip(".")):
-                    if self._site_combo.currentIndex() != idx:
-                        self._site_combo.setCurrentIndex(idx)
-                    return
+
+        # 先识别爬取类型
+        from src.sites import recognize_crawl_type
+        matched_crawl_type = recognize_crawl_type(text)
+
+        # 在全量站点中匹配域名，优先匹配与爬取类型一致的站点
+        matched_site = None
+        for site in self._all_sites:
+            domain = site.get("domain", "")
+            if domain and host.endswith(domain.lstrip(".")):
+                if matched_crawl_type and site.get("crawl_type") == matched_crawl_type:
+                    matched_site = site
+                    break
+                if matched_site is None:
+                    matched_site = site
+
+        if matched_site is None:
+            return
+
+        matched_site_name = matched_site["name"]
+
+        # 先切换爬取类型
+        if matched_crawl_type:
+            cat_idx = self._crawl_type_combo.findData(matched_crawl_type)
+            if cat_idx >= 0 and self._crawl_type_combo.currentIndex() != cat_idx:
+                self._crawl_type_combo.setCurrentIndex(cat_idx)
+
+        # 再切换目标网站
+        site_idx = self._site_combo.findData(matched_site_name)
+        if site_idx >= 0 and self._site_combo.currentIndex() != site_idx:
+            self._site_combo.setCurrentIndex(site_idx)
 
     def _on_cookie_switched(self) -> None:
         name = self._cookie_switch.currentData()
@@ -393,6 +523,11 @@ class CreateTaskPage(QWidget):
 
         self._name_input.setStyleSheet("")
 
+        crawl_type = self._crawl_type_combo.currentData()
+        if not crawl_type:
+            self._crawl_type_combo.setFocus()
+            return
+
         site = self._site_combo.currentData()
         if not site:
             self._site_combo.setFocus()
@@ -407,7 +542,7 @@ class CreateTaskPage(QWidget):
         self._url_input.setStyleSheet("")
 
         if not target_url.startswith("http"):
-            site_info = next((s for s in self._sites if s["name"] == site), None)
+            site_info = next((s for s in self._all_sites if s["name"] == site), None)
             template = site_info.get("url_template", "") if site_info else ""
             if template:
                 target_url = template.replace("{id}", target_url)
@@ -429,16 +564,30 @@ class CreateTaskPage(QWidget):
                 QMessageBox.warning(self, "不支持的网址", err_msg)
                 return
 
+        # 日期格式校验：只允许 年 / 年-月 / 年-月-日，禁止年-日或仅月/日
+        from_text = self._date_from.text().strip()
+        to_text = self._date_to.text().strip()
+        if not _validate_date_text(from_text) or not _validate_date_text(to_text):
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "日期格式错误",
+                              "时间范围只支持以下格式：\n"
+                              "• 仅年份（如 2026）\n"
+                              "• 年-月（如 2026-07）\n"
+                              "• 年-月-日（如 2026-07-10）\n"
+                              "不支持 年-日 或仅有 月/日。")
+            return
+
         config = TaskConfig(
             task_name=task_name,
+            crawl_type=crawl_type,
             site=site,
             target_url=target_url,
             cookie_file=self._get_selected_cookie(),
             scrape_config=ScrapeConfig(
                 max_count=self._parse_int(self._max_count_input.text()),
                 max_pages=self._parse_int(self._max_pages_input.text()),
-                date_from=normalize_date(self._date_from.text()) or None,
-                date_to=normalize_date(self._date_to.text()) or None,
+                date_from=_build_from_date_text(from_text),
+                date_to=_build_to_date_text(to_text),
                 delay_seconds=self._delay_spin.value(),
             ),
             filter_config=FilterConfig(
@@ -472,9 +621,10 @@ class CreateTaskPage(QWidget):
                 if not focused:
                     event.ignore()
                     return True
-            elif event.type() == QEvent.Type.FocusIn:
-                from PySide6.QtCore import QTimer
-                QTimer.singleShot(0, obj.lineEdit().selectAll)
+        elif isinstance(obj, QLineEdit):
+            # QSpinBox 内部输入框双击全选
+            if event.type() == QEvent.Type.MouseButtonDblClick:
+                obj.selectAll()
         elif obj in (self._max_count_input, self._max_pages_input):
             if event.type() == QEvent.Type.Wheel and obj.hasFocus():
                 delta = event.angleDelta().y()

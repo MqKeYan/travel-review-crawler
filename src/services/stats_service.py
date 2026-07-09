@@ -91,13 +91,14 @@ class StatsService:
 
     # ---- 增量更新 ----
 
-    def record_task_completed(self, review_count: int, site: str = "") -> None:
+    def record_task_completed(self, review_count: int, site: str = "", task_name: str = "") -> None:
         """
         记录一个任务完成。
 
         Args:
             review_count: 本次任务爬取的评论数
             site: 爬取的网站标识
+            task_name: 任务名称
         """
         self._stats["total_tasks_completed"] += 1
         self._stats["total_reviews_crawled"] += review_count
@@ -107,7 +108,10 @@ class StatsService:
             self._stats["sites_used"].append(site)
 
         self._save()
-        logger.info(f"统计已更新: +1 任务, +{review_count} 评论")
+        if task_name:
+            logger.info(f"任务 [{task_name}] 统计已更新: +{review_count} 评论")
+        else:
+            logger.info(f"统计已更新: +1 任务, +{review_count} 评论")
 
     def record_task_error(self) -> None:
         """记录一个任务出错"""

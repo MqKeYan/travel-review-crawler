@@ -282,7 +282,7 @@ def get_dark_forest_stylesheet() -> str:
     }
 
     QTextEdit:focus, QPlainTextEdit:focus {
-        border-color: #00C853;
+        border-color: #2a2f2a;
     }
 
     /* 日志显示区域 — 左上直角 */
@@ -821,7 +821,7 @@ def get_light_stylesheet() -> str:
 
     /* ==================== 卡片 ==================== */
     #taskCard {
-        background-color: #ffffff;
+        background-color: #f2f4f2;
         border: 1px solid #dde0dd;
         border-radius: 10px;
         padding: 14px;
@@ -984,7 +984,7 @@ def get_light_stylesheet() -> str:
 
     /* ==================== 输入框 ==================== */
     QLineEdit {
-        background-color: #ffffff;
+        background-color: #f2f4f2;
         color: #1a1d1a;
         border: 1px solid #c5c9c5;
         border-radius: 7px;
@@ -1002,7 +1002,7 @@ def get_light_stylesheet() -> str:
     }
 
     QTextEdit, QPlainTextEdit {
-        background-color: #ffffff;
+        background-color: #f2f4f2;
         color: #1a1d1a;
         border: 1px solid #c5c9c5;
         border-radius: 7px;
@@ -1014,7 +1014,7 @@ def get_light_stylesheet() -> str:
     }
 
     QTextEdit:focus, QPlainTextEdit:focus {
-        border-color: #00A844;
+        border-color: #cccccc;
     }
 
     /* 日志显示区域 — 左上直角，浅灰底护眼 */
@@ -1040,7 +1040,7 @@ def get_light_stylesheet() -> str:
 
     /* ==================== 数字输入框 ==================== */
     QSpinBox {
-        background-color: #ffffff;
+        background-color: #f2f4f2;
         color: #1a1d1a;
         border: 1px solid #c5c9c5;
         border-radius: 7px;
@@ -1071,7 +1071,7 @@ def get_light_stylesheet() -> str:
 
     /* ==================== 下拉框 ==================== */
     QComboBox {
-        background-color: #ffffff;
+        background-color: #f2f4f2;
         color: #1a1d1a;
         border: 1px solid #c5c9c5;
         border-radius: 7px;
@@ -1098,7 +1098,7 @@ def get_light_stylesheet() -> str:
     }
 
     QComboBox QAbstractItemView {
-        background-color: #ffffff;
+        background-color: #f2f4f2;
         color: #1a1d1a;
         border: 1px solid #00A844;
         border-radius: 6px;
@@ -1124,7 +1124,7 @@ def get_light_stylesheet() -> str:
 
     /* ==================== 表格 ==================== */
     QTableView, QTableWidget {
-        background-color: #ffffff;
+        background-color: #f2f4f2;
         color: #1a1d1a;
         border: 1px solid #d5d9d5;
         border-radius: 8px;
@@ -1208,7 +1208,7 @@ def get_light_stylesheet() -> str:
 
     /* ==================== 分组框 ==================== */
     QGroupBox {
-        background-color: #ffffff;
+        background-color: #f2f4f2;
         border: 1px solid #d5d9d5;
         border-radius: 10px;
         margin-top: 18px;
@@ -1368,7 +1368,7 @@ def get_light_stylesheet() -> str:
         height: 20px;
         border-radius: 4px;
         border: 2px solid #c5c9c5;
-        background-color: #ffffff;
+        background-color: #f2f4f2;
     }
 
     QCheckBox::indicator:hover {
@@ -1401,7 +1401,7 @@ def get_light_stylesheet() -> str:
         height: 20px;
         border-radius: 10px;
         border: 2px solid #c5c9c5;
-        background-color: #ffffff;
+        background-color: #f2f4f2;
     }
 
     QRadioButton::indicator:hover {
@@ -1424,7 +1424,7 @@ def get_light_stylesheet() -> str:
 
     /* ==================== Tab 控件 ==================== */
     QTabWidget::pane {
-        background-color: #ffffff;
+        background-color: #f2f4f2;
         border: 1px solid #d5d9d5;
         border-top: none;
         border-radius: 0px 0px 8px 8px;
@@ -1451,7 +1451,7 @@ def get_light_stylesheet() -> str:
 
     /* ==================== 列表视图 ==================== */
     QListView {
-        background-color: #ffffff;
+        background-color: #f2f4f2;
         border: none;
         outline: none;
     }
@@ -1474,7 +1474,7 @@ def get_light_stylesheet() -> str:
 
     /* ==================== 提示框 ==================== */
     QToolTip {
-        background-color: #ffffff;
+        background-color: #f2f4f2;
         color: #1a1d1a;
         border: none;
         padding: 6px 10px;

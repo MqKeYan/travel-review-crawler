@@ -199,7 +199,7 @@ def save_cookies_to_file(platform: str, cookie_name: str, cookies: list[dict], b
     存储路径：cookies/{platform}/{cookie_name}.json
 
     Args:
-        platform: 平台标识（如 "ctrip"、"dianping"）
+        platform: 平台标识（如 "ctrip"、"fliggy"）
         cookie_name: Cookie 文件名称（用户自定义）
         cookies: Cookie 字典列表
         browser_name: 来源浏览器名称

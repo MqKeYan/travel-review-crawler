@@ -75,6 +75,10 @@ class ExportService:
         Returns:
             ExportWorker 实例（可用于连接 Signal）
         """
+        # 等待上一次导出线程彻底结束，防止引用覆盖导致 QThread 销毁警告
+        if self._current_worker and self._current_worker.isRunning():
+            logger.info("上一次导出尚未完成，等待其结束...")
+            self._current_worker.wait(5000)
         worker = ExportWorker(reviews, config)
         self._current_worker = worker
         worker.start()

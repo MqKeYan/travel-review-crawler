@@ -100,7 +100,7 @@ class Notifier:
         if elapsed:
             message += f"，耗时 {elapsed}"
 
-        self._notify_all(title, message, event="complete")
+        self._notify_all(title, message, task_name, event="complete")
 
     def notify_error(self, task_name: str, error_info: str) -> None:
         """
@@ -113,18 +113,22 @@ class Notifier:
         title = "爬取任务出错"
         message = f"「{task_name}」运行出错: {error_info}"
 
-        self._notify_all(title, message, event="error")
+        self._notify_all(title, message, task_name, event="error")
 
-    def _notify_all(self, title: str, message: str, event: str = "complete") -> None:
+    def _notify_all(self, title: str, message: str, task_name: str = "", event: str = "complete") -> None:
         """
         根据设置发送所有已启用的通知通道。
 
         Args:
             title: 通知标题
             message: 通知内容
+            task_name: 任务名称
             event: 事件类型（"complete" 或 "error"）
         """
-        logger.info(f"通知 [{event}]: {title} - {message}")
+        if task_name:
+            logger.info(f"任务 [{task_name}] 通知 [{event}]: {title} - {message}")
+        else:
+            logger.info(f"通知 [{event}]: {title} - {message}")
 
         if self.settings.desktop_popup:
             self._send_desktop_popup(title, message)

@@ -260,7 +260,27 @@ class TaskPage(QWidget):
             self._pause_btn.setEnabled(False)
             self._stop_btn.setEnabled(False)
 
+        # 同步进度条：根据选中任务的实际状态回显/重置进度
+        if task.status == TaskStatus.COMPLETED:
+            self._detail_progress.set_complete(task.total_reviews)
+        elif task.status == TaskStatus.RUNNING:
+            p = task.progress
+            self._detail_progress.update_progress({
+                "current": p.current, "total": p.total,
+                "percentage": p.percentage, "current_page": p.current_page,
+                "message": p.message, "speed": p.speed, "eta": p.eta,
+            })
+        elif task.status == TaskStatus.ERROR:
+            self._detail_progress.set_error("任务出错")
+        else:
+            self._detail_progress.reset()
+
         self.task_selected.emit(task_name)
+
+    def refresh_detail(self) -> None:
+        """刷新当前选中任务的详情（按钮状态等）"""
+        if self._selected_task_name:
+            self._show_detail(self._selected_task_name)
 
     def update_detail_progress(self, task_name: str, progress_data: dict) -> None:
         """实时更新详情页的进度条（仅当进度属于当前选中任务时更新）"""

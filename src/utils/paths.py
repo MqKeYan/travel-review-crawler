@@ -136,7 +136,7 @@ def get_cookie_platform_dir(platform: str) -> Path:
     获取指定平台的 Cookie 存储子目录路径，不存在则自动创建。
 
     Args:
-        platform: 平台标识（如 "ctrip"、"dianping"）
+        platform: 平台标识（如 "ctrip"、"fliggy"）
 
     Returns:
         平台 Cookie 子目录路径（cookies/{platform}/）
@@ -158,8 +158,8 @@ def get_exports_dir() -> Path:
 
 
 def get_images_dir() -> Path:
-    """获取图片存储目录路径，不存在则自动创建"""
-    path = get_data_dir() / "images"
+    """获取图片存储目录路径（位于导出目录下），不存在则自动创建"""
+    path = get_exports_dir() / "images"
     return _ensure_dir(path)
 
 

@@ -191,10 +191,11 @@ class DataPage(QWidget):
         """
         self._available_tasks = tasks
         self._task_selector.clear()
-        self._task_selector.addItem("-- 请选择任务 --", "")
         for task in tasks:
             display = f"{task.get('name', '')} ({task.get('count', 0)}条)"
             self._task_selector.addItem(display, task.get("name", ""))
+        # 折叠状态显示 placeholder 提示词
+        self._task_selector.setCurrentIndex(-1)
 
     def set_reviews(self, task_name: str, reviews: list[dict], stats: ReviewStats) -> None:
         """

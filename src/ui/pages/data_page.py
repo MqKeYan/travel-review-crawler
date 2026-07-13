@@ -17,7 +17,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 
 from src.ui.components.data_table import DataTable
-from src.models.review import STANDARD_FIELDS, ReviewStats
+from src.models.review import STANDARD_FIELDS, CRAWL_TYPE_FIELDS, ReviewStats
 
 
 class StatsCard(QFrame):
@@ -67,7 +67,10 @@ class DataPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._current_task: str | None = None
+        self._current_crawl_type: str | None = None
         self._available_tasks: list[dict] = []
+        # 任务名 → 爬取类型映射
+        self._task_crawl_types: dict[str, str] = {}
 
         self._setup_ui()
 
@@ -139,10 +142,8 @@ class DataPage(QWidget):
         format_row.setSpacing(8)
 
         self._export_xlsx_cb = QCheckBox("XLSX")
-        self._export_xlsx_cb.setChecked(True)
         self._export_csv_cb = QCheckBox("CSV")
         self._export_txt_cb = QCheckBox("TXT")
-        self._export_txt_cb.setChecked(False)
         self._export_docx_cb = QCheckBox("DOCX")
 
         self._export_btn = QPushButton("导出选中格式")
@@ -160,20 +161,23 @@ class DataPage(QWidget):
         format_row.addWidget(self._export_btn)
         export_layout.addLayout(format_row)
 
-        # 导出字段（一行，紧凑排列）
-        field_row = QHBoxLayout()
-        field_row.setSpacing(6)
-        field_row.addWidget(QLabel("导出字段:"))
+        # 导出字段（一行，紧凑排列，初始隐藏）
+        self._field_row = QHBoxLayout()
+        self._field_row.setSpacing(6)
+        self._field_label = QLabel("导出字段:")
+        self._field_row.addWidget(self._field_label)
 
         self._field_checkboxes: dict[str, QCheckBox] = {}
         for field_key, field_label in STANDARD_FIELDS:
             cb = QCheckBox(field_label)
-            cb.setChecked(True)
             cb.setFont(QFont("微软雅黑", 11))
             self._field_checkboxes[field_key] = cb
-            field_row.addWidget(cb)
-        field_row.addStretch()
-        export_layout.addLayout(field_row)
+            self._field_row.addWidget(cb)
+        self._field_row.addStretch()
+        export_layout.addLayout(self._field_row)
+
+        # 初始隐藏所有字段勾选框
+        self._set_field_row_visible(False)
 
         export_group.setLayout(export_layout)
         content_layout.addWidget(export_group)
@@ -187,15 +191,22 @@ class DataPage(QWidget):
         更新可选任务列表。
 
         Args:
-            tasks: 任务信息列表 [{"name": ..., "count": ...}, ...]
+            tasks: 任务信息列表 [{"name": ..., "count": ..., "crawl_type": ...}, ...]
         """
         self._available_tasks = tasks
+        # 缓存任务名 → 爬取类型映射
+        self._task_crawl_types = {t["name"]: t.get("crawl_type", "") for t in tasks}
+        # 阻塞信号，避免 clear/addItem 过程中触发 task_selected 加载数据
+        self._task_selector.blockSignals(True)
         self._task_selector.clear()
         for task in tasks:
             display = f"{task.get('name', '')} ({task.get('count', 0)}条)"
             self._task_selector.addItem(display, task.get("name", ""))
         # 折叠状态显示 placeholder 提示词
         self._task_selector.setCurrentIndex(-1)
+        self._task_selector.blockSignals(False)
+        # 手动触发一次清理：清空表格和统计卡片
+        self._clear_table()
 
     def set_reviews(self, task_name: str, reviews: list[dict], stats: ReviewStats) -> None:
         """
@@ -207,7 +218,11 @@ class DataPage(QWidget):
             stats: 统计信息
         """
         self._current_task = task_name
-        self._data_table.set_reviews(reviews)
+        self._current_crawl_type = self._task_crawl_types.get(task_name, "")
+
+        # 按爬取类型确定显示字段
+        type_fields = CRAWL_TYPE_FIELDS.get(self._current_crawl_type)
+        self._data_table.set_reviews(reviews, fields=type_fields)
 
         # 更新统计卡片
         self._stat_total.update_stats(str(stats.total))
@@ -215,38 +230,105 @@ class DataPage(QWidget):
         date_range = f"{stats.date_range[0] or '-'} ~ {stats.date_range[1] or '-'}"
         self._stat_range.update_stats(date_range)
 
-        # 自动取消全空字段的导出勾选
-        self._auto_deselect_empty_fields(reviews)
+        # 根据爬取类型显示/隐藏导出字段
+        self._update_fields_by_type()
 
-    def _auto_deselect_empty_fields(self, reviews: list[dict]) -> None:
-        """
-        扫描所有评论数据，自动取消勾选全列都为空的导出字段。
+        # 自动取消勾选全列为空的字段
+        self._auto_uncheck_empty_columns(reviews)
 
-        只取消勾选（不重新勾选已取消的字段），
-        用户手动调整后不会被覆盖（仅在数据加载时调用一次）。
+        # 按用户设置的默认导出格式勾选
+        from src.services.system_service import SystemService
+        default_fmt = SystemService().get_setting("export.default_format", "xlsx")
+        self._export_xlsx_cb.setChecked(default_fmt == "xlsx")
+        self._export_csv_cb.setChecked(default_fmt == "csv")
+        self._export_txt_cb.setChecked(default_fmt == "txt")
+        self._export_docx_cb.setChecked(default_fmt == "docx")
+
+    def _update_fields_by_type(self) -> None:
         """
-        if not reviews:
+        根据当前任务的爬取类型控制导出字段的显隐：
+        - 无类型时隐藏整个字段行
+        - 有类型时仅显示该类型定义的字段，全勾选
+        """
+        if not self._current_crawl_type:
+            self._set_field_row_visible(False)
             return
 
-        # 空值判定规则：不同字段类型有不同的"空"定义
-        empty_checks = {
-            "rating": lambda v: v == 0 or v is None,
-            "image_urls": lambda v: not v,  # 空列表
-        }
+        type_fields = CRAWL_TYPE_FIELDS.get(self._current_crawl_type, [])
+        if not type_fields:
+            self._set_field_row_visible(False)
+            return
 
         for field_key, cb in self._field_checkboxes.items():
-            if not cb.isChecked():
-                continue  # 已手动取消的跳过
-            check = empty_checks.get(field_key, lambda v: not v)
-            all_empty = all(check(r.get(field_key)) for r in reviews)
+            if field_key in type_fields:
+                cb.setVisible(True)
+                cb.setChecked(True)
+            else:
+                cb.setVisible(False)
+                cb.setChecked(False)  # 隐藏的字段取消勾选，防止被意外导出
+
+        # 只显示"导出字段:"标签，不用 _set_field_row_visible（它会覆盖 checkbox 的显隐状态）
+        self._field_label.setVisible(True)
+
+    def _auto_uncheck_empty_columns(self, reviews: list[dict]) -> None:
+        """扫描数据，自动取消勾选全列为空/零值的字段。"""
+        type_fields = CRAWL_TYPE_FIELDS.get(self._current_crawl_type, [])
+        if not type_fields or not reviews:
+            return
+
+        for field_key in type_fields:
+            cb = self._field_checkboxes.get(field_key)
+            if cb is None or not cb.isVisible():
+                continue
+            # 检查该字段是否全部为空
+            all_empty = True
+            for r in reviews:
+                val = r.get(field_key)
+                # 空值判定：None、空字符串、空列表、0（评分）
+                if val is None:
+                    continue
+                if isinstance(val, str) and val.strip() == "":
+                    continue
+                if isinstance(val, list) and len(val) == 0:
+                    continue
+                if isinstance(val, (int, float)) and val == 0:
+                    continue
+                all_empty = False
+                break
             if all_empty:
                 cb.setChecked(False)
+
+    def _set_field_row_visible(self, visible: bool) -> None:
+        """切换导出字段整行的可见性"""
+        for i in range(self._field_row.count()):
+            item = self._field_row.itemAt(i)
+            if item and item.widget():
+                item.widget().setVisible(visible)
+
+    def _clear_table(self) -> None:
+        """清空表格数据、统计卡片和导出字段（回到无任务选中状态）"""
+        self._current_task = None
+        self._current_crawl_type = None
+        self._data_table.set_reviews([])
+        self._stat_total.update_stats("0")
+        self._stat_avg.update_stats("-")
+        self._stat_range.update_stats("-")
+        # 清空导出格式勾选
+        self._export_xlsx_cb.setChecked(False)
+        self._export_csv_cb.setChecked(False)
+        self._export_txt_cb.setChecked(False)
+        self._export_docx_cb.setChecked(False)
+
+        self._set_field_row_visible(False)
 
     def _on_task_changed(self, index: int) -> None:
         """任务选择变化，发出 task_selected 信号"""
         task_name = self._task_selector.currentData()
         if task_name:
             self.task_selected.emit(task_name)
+        else:
+            # 回到空选择状态，清空表格和导出字段
+            self._clear_table()
 
     def _on_export(self) -> None:
         """导出按钮"""

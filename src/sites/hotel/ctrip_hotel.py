@@ -119,20 +119,6 @@ def extract_reviews_from_page(driver) -> list[dict]:
     return reviews
 
 
-# ==================== 去重 ====================
-
-def _dedup_reviews(reviews: list[dict]) -> list[dict]:
-    """基于用户名+内容前80字去重"""
-    seen = set()
-    result = []
-    for r in reviews:
-        key = (r.get("username", ""), r.get("content", "")[:80])
-        if key not in seen:
-            seen.add(key)
-            result.append(r)
-    return result
-
-
 # ==================== 页面预处理 ====================
 
 def _click_review_tab(driver) -> bool:
@@ -228,6 +214,7 @@ def selenium_crawl_ctrip_hotel(
     filter_chain=None,
     task_name: str = "",
     driver_ref: list | None = None,
+    notifier=None,
 ) -> tuple[list[dict], int]:
     """通过 Selenium 翻页爬取携程酒店评论"""
     _prefix = f"任务 [{task_name}] " if task_name else ""
@@ -256,7 +243,13 @@ def selenium_crawl_ctrip_hotel(
     total_rejected = 0
 
     try:
-        driver.get(url)
+        # 构造干净 URL
+        params = extract_url_params(url)
+        clean_url = build_ctrip_hotel_url(
+            params.get("domain", "hotels.ctrip.com"),
+            params.get("id", ""),
+        )
+        driver.get(clean_url)
         wait = WebDriverWait(driver, 15)
         time.sleep(3)
 
@@ -299,7 +292,6 @@ def selenium_crawl_ctrip_hotel(
                 overflow = len(all_reviews) - max_count
                 all_reviews = all_reviews[:max_count]
                 total_rejected += overflow
-            all_reviews = _dedup_reviews(all_reviews)
             new_count = len(all_reviews) - before
 
             if filter_chain:
@@ -354,6 +346,23 @@ def _validate_ctrip_hotel_url(url: str) -> tuple[bool, str]:
     if "hotels.ctrip.com" not in host:
         return (False, "仅支持 hotels.ctrip.com 的酒店评价页面")
     return (True, "")
+
+
+# ==================== URL 构造 ====================
+
+def extract_url_params(url: str) -> dict[str, str]:
+    """从携程酒店 URL 中提取关键参数（域名+酒店ID）"""
+    from urllib.parse import urlparse
+    params = {"domain": "hotels.ctrip.com"}
+    rid = extract_hotel_id(url)
+    if rid:
+        params["id"] = rid
+    return params
+
+
+def build_ctrip_hotel_url(domain: str, id: str) -> str:
+    """用提取的参数构造干净的携程酒店 URL"""
+    return f"https://{domain}/hotels/{id}.html"
 
 
 # ==================== 适配器入口 ====================

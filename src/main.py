@@ -141,6 +141,7 @@ def main() -> int:
 
     _SUPPRESSED_QT_PATTERNS = [
         "QFont::setPointSize: Point size <= 0",
+        "OpenType support missing",
     ]
 
     def _qt_message_handler(msg_type, context, msg):

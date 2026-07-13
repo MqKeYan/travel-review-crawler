@@ -27,8 +27,22 @@ STANDARD_FIELDS = [
     ("time", "评论时间"),
     ("travel_date", "出发日期"),
     ("tour_type", "出游类型"),
+    ("purchase_info", "购买内容"),
     ("image_urls", "图片"),
+    ("append_review", "追评内容"),
 ]
+
+# 各爬取类型实际收集的字段（用于数据查看页面按类型显示列）
+# 新增爬取类型时在此添加对应字段列表
+CRAWL_TYPE_FIELDS: dict[str, list[str]] = {
+    "shopping": ["username", "content", "time", "purchase_info", "image_urls", "append_review"],
+    "scenic":   ["username", "user_level", "avatar_url", "ip_location", "rating",
+                  "rating_label", "content", "time", "travel_date", "tour_type", "image_urls"],
+    "hotel":    ["username", "rating", "content", "time", "image_urls"],
+}
+
+# 字段名 → 中文标签映射（用于动态生成表格表头）
+_FIELD_LABEL_MAP = dict(STANDARD_FIELDS)
 
 # 标准评论对象的默认空值模板
 EMPTY_REVIEW = {
@@ -42,7 +56,9 @@ EMPTY_REVIEW = {
     "time": "",
     "travel_date": "",
     "tour_type": "",
+    "purchase_info": "",
     "image_urls": [],
+    "append_review": "",
 }
 
 # 评论数据类型（类型别名，实际为字典）

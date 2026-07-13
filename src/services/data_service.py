@@ -13,26 +13,6 @@ from typing import Optional
 from src.models.review import ReviewStats, PageResult
 
 
-def _deduplicate_reviews(reviews: list[dict]) -> list[dict]:
-    """
-    对评论列表去重（基于用户名+评论内容+时间 去重）。
-
-    Args:
-        reviews: 原始评论列表
-
-    Returns:
-        去重后的评论列表（保留首次出现的顺序）
-    """
-    seen = set()
-    result = []
-    for r in reviews:
-        key = (r.get("username", ""), r.get("content", "")[:100], r.get("time", ""))
-        if key not in seen:
-            seen.add(key)
-            result.append(r)
-    return result
-
-
 class DataService:
     """
     数据查询服务。
@@ -53,21 +33,17 @@ class DataService:
 
     def add_reviews(self, task_name: str, reviews: list[dict]) -> None:
         """
-        添加评论数据到缓存（自动去重）。
+        添加评论数据到缓存。
 
         Args:
             task_name: 任务名称
             reviews: 评论数据列表
         """
-        unique = _deduplicate_reviews(reviews)
         with self._lock:
-            # 如果已有该任务的数据，追加（追加前也去重）
             if task_name in self._data:
-                existing = self._data[task_name]
-                combined = existing + unique
-                self._data[task_name] = _deduplicate_reviews(combined)
+                self._data[task_name].extend(reviews)
             else:
-                self._data[task_name] = unique
+                self._data[task_name] = reviews
             # 新数据写入后清除已导出标记
             self._exported.discard(task_name)
 

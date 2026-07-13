@@ -57,16 +57,18 @@ class CrawlWorker(QThread):
     # 任务完成（包含评论列表、总条数、耗时等信息）
     complete = Signal(dict)
 
-    def __init__(self, task_config: TaskConfig, parent=None):
+    def __init__(self, task_config: TaskConfig, parent=None, notifier=None):
         """
         初始化爬取工作线程。
 
         Args:
             task_config: 完整的任务配置
             parent: 父 QObject
+            notifier: 通知器实例（用于验证码通知等）
         """
         super().__init__(parent)
         self._config = task_config
+        self._notifier = notifier
 
         # 爬取到的评论数据缓存
         self._reviews: list[dict] = []
@@ -164,13 +166,10 @@ class CrawlWorker(QThread):
                 filter_chain=self._filter_chain,
                 task_name=task_id,
                 driver_ref=driver_ref,
+                notifier=self._notifier,
             )
 
             self._reviews = reviews
-            if rejected_count > 0:
-                self._log_message(
-                    f"任务 [{task_id}] 过滤统计: 通过 {len(reviews)} 条，过滤掉 {rejected_count} 条"
-                )
 
             # ---- 下载评论图片到本地 ----
             # 如果用户勾选了"移除图片"，跳过下载
@@ -208,6 +207,8 @@ class CrawlWorker(QThread):
             elapsed = time.time() - self._start_time
             elapsed_str = f"{elapsed:.0f}秒" if elapsed < 60 else f"{elapsed/60:.1f}分钟"
 
+            self._log_message(f"任务 [{task_id}] 完成，共 {len(self._reviews)} 条，耗时 {elapsed_str}")
+
             self.complete.emit({
                 "task_name": self._config.task_name,
                 "reviews": self._reviews,
@@ -215,10 +216,6 @@ class CrawlWorker(QThread):
                 "rejected_count": rejected_count,
                 "elapsed": elapsed_str,
             })
-
-            self._log_message(
-                f"任务 [{task_id}] 完成，共 {len(self._reviews)} 条"
-            )
 
         except Exception as e:
             logger.exception(f"任务 [{task_id}] 爬取线程异常")

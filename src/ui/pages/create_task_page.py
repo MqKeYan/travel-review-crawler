@@ -22,6 +22,7 @@ from src.models.task import (
     ExportConfig, NotifyConfig, NotifySetting,
 )
 from src.utils.paths import get_cookie_platform_dir
+from src.utils.url_cleaner import clean_task_url
 
 
 
@@ -254,7 +255,7 @@ class CreateTaskPage(QWidget):
         self._max_count_input = _SelectAllLineEdit()
         self._max_count_input.setPlaceholderText("不限")
         self._max_count_input.setValidator(QIntValidator(0, 99999))
-        self._max_count_input.setFixedWidth(100)
+        self._max_count_input.setFixedWidth(80)
         self._max_count_input.installEventFilter(self)
         max_count_row.addWidget(self._max_count_input)
         max_count_row.addWidget(QLabel("条"))
@@ -265,7 +266,7 @@ class CreateTaskPage(QWidget):
         self._max_pages_input = _SelectAllLineEdit()
         self._max_pages_input.setPlaceholderText("不限")
         self._max_pages_input.setValidator(QIntValidator(0, 9999))
-        self._max_pages_input.setFixedWidth(100)
+        self._max_pages_input.setFixedWidth(80)
         self._max_pages_input.installEventFilter(self)
         max_pages_row.addWidget(self._max_pages_input)
         max_pages_row.addWidget(QLabel("页"))
@@ -276,6 +277,8 @@ class CreateTaskPage(QWidget):
         self._delay_spin = QSpinBox()
         self._delay_spin.setRange(1, 30)
         self._delay_spin.setValue(2)
+        self._delay_spin.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
+        self._delay_spin.setFixedWidth(80)
         self._delay_spin.setToolTip("每次请求的等待间隔，越大越慢但越安全")
         self._delay_spin.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._delay_spin.installEventFilter(self)
@@ -339,7 +342,7 @@ class CreateTaskPage(QWidget):
         notify_form.addRow(self._label("完成通知:"), notify_check_row)
 
         self._notify_pushplus_input = _SelectAllLineEdit()
-        self._notify_pushplus_input.setPlaceholderText("输入 PushPlus Token（留空不推送）")
+        self._notify_pushplus_input.setPlaceholderText("请输入 PushPlus Token（留空则不会推送）")
         notify_form.addRow(self._label("PushPlus:"), self._notify_pushplus_input)
 
         notify_group.setLayout(notify_form)
@@ -432,22 +435,25 @@ class CreateTaskPage(QWidget):
             return
 
         # 先识别爬取类型
-        from src.sites import recognize_crawl_type
+        from src.sites import recognize_crawl_type, get_sites_by_crawl_type, get_crawl_type_domains
         matched_crawl_type = recognize_crawl_type(text)
 
-        # 在全量站点中匹配域名，优先匹配与爬取类型一致的站点
+        # 在全量站点中匹配域名（同时检查适配器 domain 和爬取类型域名列表）
         matched_site = None
+        type_domains = get_crawl_type_domains(matched_crawl_type) if matched_crawl_type else []
+
         for site in self._all_sites:
             domain = site.get("domain", "")
-            if domain and host.endswith(domain.lstrip(".")):
-                if matched_crawl_type and site.get("crawl_type") == matched_crawl_type:
+            # 检查是否匹配适配器域名或爬取类型域名列表
+            site_domains = [domain.lstrip(".")] if domain else []
+            if matched_crawl_type and site.get("crawl_type") == matched_crawl_type:
+                site_domains = list(set(site_domains + type_domains))
+            for d in site_domains:
+                if d and host.endswith(d):
                     matched_site = site
                     break
-                if matched_site is None:
-                    matched_site = site
-
-        if matched_site is None:
-            return
+            if matched_site:
+                break
 
         matched_site_name = matched_site["name"]
 
@@ -577,11 +583,14 @@ class CreateTaskPage(QWidget):
                               "不支持 年-日 或仅有 月/日。")
             return
 
+        # 存储前清洗 URL，去除追踪参数
+        clean_url = clean_task_url(site, target_url)
+
         config = TaskConfig(
             task_name=task_name,
             crawl_type=crawl_type,
             site=site,
-            target_url=target_url,
+            target_url=clean_url,
             cookie_file=self._get_selected_cookie(),
             scrape_config=ScrapeConfig(
                 max_count=self._parse_int(self._max_count_input.text()),
@@ -607,6 +616,11 @@ class CreateTaskPage(QWidget):
                     desktop_popup=self._notify_popup_cb.isChecked(),
                     sound=self._notify_sound_cb.isChecked(),
                     pushplus_token=self._notify_pushplus_input.text().strip(),
+                ),
+                on_captcha=NotifySetting(
+                    desktop_popup=self._defaults.get("default_captcha_popup", True),
+                    sound=self._defaults.get("default_captcha_sound", True),
+                    pushplus_token=self._defaults.get("default_captcha_pushplus_token", ""),
                 ),
             ),
         )

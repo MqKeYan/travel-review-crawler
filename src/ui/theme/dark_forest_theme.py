@@ -290,6 +290,16 @@ def get_dark_forest_stylesheet() -> str:
         padding: 4px;
         border-top-left-radius: 0px;
     }
+    #logTextEdit:hover, #logTextEdit:focus {
+        border-color: #2a2f2a;
+        background-color: #1f231f;
+    }
+    #logTextEdit QScrollBar:vertical, #logTextEdit QScrollBar:horizontal {
+        background-color: #1f231f;
+    }
+    #logTextEdit QScrollBar::sub-page, #logTextEdit QScrollBar::add-page {
+        background-color: #1f231f;
+    }
 
     /* 日志标签页容器 — 无背景框格 */
     #logTabWidget::pane {
@@ -502,18 +512,21 @@ def get_dark_forest_stylesheet() -> str:
     }
 
     QScrollBar::handle:vertical {
-        background-color: #2a2f2a;
+        background-color: #4a4f4a;
         border-radius: 6px;
         min-height: 36px;
-        margin: 2px;
     }
 
     QScrollBar::handle:vertical:hover {
-        background-color: #3a3f3a;
+        background-color: #6a6f6a;
     }
 
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
         height: 0px;
+    }
+
+    QScrollBar::sub-page:vertical, QScrollBar::add-page:vertical {
+        background-color: #0f120f;
     }
 
     QScrollBar:horizontal {
@@ -523,18 +536,37 @@ def get_dark_forest_stylesheet() -> str:
     }
 
     QScrollBar::handle:horizontal {
-        background-color: #2a2f2a;
+        background-color: #4a4f4a;
         border-radius: 6px;
         min-width: 36px;
-        margin: 2px;
     }
 
     QScrollBar::handle:horizontal:hover {
-        background-color: #3a3f3a;
+        background-color: #6a6f6a;
     }
 
     QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
         width: 0px;
+    }
+
+    QScrollBar::sub-page:horizontal, QScrollBar::add-page:horizontal {
+        background-color: #0f120f;
+    }
+
+    /* 表格内滚动条 — 与表格背景同色 */
+    QTableView QScrollBar:vertical, QTableWidget QScrollBar:vertical {
+        background-color: #161916;
+    }
+    QTableView QScrollBar::sub-page:vertical, QTableView QScrollBar::add-page:vertical,
+    QTableWidget QScrollBar::sub-page:vertical, QTableWidget QScrollBar::add-page:vertical {
+        background-color: #161916;
+    }
+    QTableView QScrollBar:horizontal, QTableWidget QScrollBar:horizontal {
+        background-color: #161916;
+    }
+    QTableView QScrollBar::sub-page:horizontal, QTableView QScrollBar::add-page:horizontal,
+    QTableWidget QScrollBar::sub-page:horizontal, QTableWidget QScrollBar::add-page:horizontal {
+        background-color: #161916;
     }
 
     /* ==================== 拆分器 ==================== */
@@ -1023,6 +1055,16 @@ def get_light_stylesheet() -> str:
         padding: 4px;
         border-top-left-radius: 0px;
     }
+    #logTextEdit:hover, #logTextEdit:focus {
+        border-color: #c5c9c5;
+        background-color: #ebedeb;
+    }
+    #logTextEdit QScrollBar:vertical, #logTextEdit QScrollBar:horizontal {
+        background-color: #ebedeb;
+    }
+    #logTextEdit QScrollBar::sub-page, #logTextEdit QScrollBar::add-page {
+        background-color: #ebedeb;
+    }
 
     /* 日志标签页容器 — 无背景框格 */
     #logTabWidget::pane {
@@ -1235,18 +1277,21 @@ def get_light_stylesheet() -> str:
     }
 
     QScrollBar::handle:vertical {
-        background-color: #c5c9c5;
+        background-color: #909590;
         border-radius: 6px;
         min-height: 36px;
-        margin: 2px;
     }
 
     QScrollBar::handle:vertical:hover {
-        background-color: #9E9E9E;
+        background-color: #606560;
     }
 
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
         height: 0px;
+    }
+
+    QScrollBar::sub-page:vertical, QScrollBar::add-page:vertical {
+        background-color: #f5f7f5;
     }
 
     QScrollBar:horizontal {
@@ -1256,18 +1301,37 @@ def get_light_stylesheet() -> str:
     }
 
     QScrollBar::handle:horizontal {
-        background-color: #c5c9c5;
+        background-color: #909590;
         border-radius: 6px;
         min-width: 36px;
-        margin: 2px;
     }
 
     QScrollBar::handle:horizontal:hover {
-        background-color: #9E9E9E;
+        background-color: #606560;
     }
 
     QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
         width: 0px;
+    }
+
+    QScrollBar::sub-page:horizontal, QScrollBar::add-page:horizontal {
+        background-color: #f5f7f5;
+    }
+
+    /* 表格内滚动条 — 与表格背景同色 */
+    QTableView QScrollBar:vertical, QTableWidget QScrollBar:vertical {
+        background-color: #f2f4f2;
+    }
+    QTableView QScrollBar::sub-page:vertical, QTableView QScrollBar::add-page:vertical,
+    QTableWidget QScrollBar::sub-page:vertical, QTableWidget QScrollBar::add-page:vertical {
+        background-color: #f2f4f2;
+    }
+    QTableView QScrollBar:horizontal, QTableWidget QScrollBar:horizontal {
+        background-color: #f2f4f2;
+    }
+    QTableView QScrollBar::sub-page:horizontal, QTableView QScrollBar::add-page:horizontal,
+    QTableWidget QScrollBar::sub-page:horizontal, QTableWidget QScrollBar::add-page:horizontal {
+        background-color: #f2f4f2;
     }
 
     /* ==================== 拆分器 ==================== */
@@ -1499,14 +1563,12 @@ THEME_DISPLAY_NAMES = {
 # 日志级别颜色：暗色 / 浅色各一套
 LOG_COLORS = {
     "dark": {
-        "DEBUG": "#42A5F5",
         "INFO": "#00E676",
         "WARNING": "#FFB74D",
         "ERROR": "#EF5350",
         "CRITICAL": "#FF1744",
     },
     "light": {
-        "DEBUG": "#1565C0",
         "INFO": "#00A844",
         "WARNING": "#E65100",
         "ERROR": "#C62828",

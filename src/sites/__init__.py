@@ -19,7 +19,7 @@ from src.sites.base import SiteAdapter, HttpMethod
 # 爬取类型定义
 _CRAWL_TYPE_INFO = {
     "scenic":   {"key": "scenic",   "display_name": "旅游景点", "domains": [".ctrip.com", ".fliggy.com"]},
-    "shopping": {"key": "shopping", "display_name": "购物网站", "domains": []},
+    "shopping": {"key": "shopping", "display_name": "购物网站", "domains": ["detail.tmall.com", "item.taobao.com"]},
     "hotel":    {"key": "hotel",    "display_name": "酒店民宿", "domains": ["hotels.ctrip.com"]},
 }
 _CRAWL_TYPE_ORDER = ["shopping", "scenic", "hotel"]
@@ -159,9 +159,25 @@ def recognize_crawl_type(url: str) -> str | None:
     return None
 
 
+def get_crawl_type_domains(crawl_type: str) -> list[str]:
+    """
+    获取指定爬取类型的所有匹配域名。
+
+    Args:
+        crawl_type: 爬取类型标识
+
+    Returns:
+        域名列表（不含前导点），未找到返回空列表
+    """
+    info = _CRAWL_TYPE_INFO.get(crawl_type, {})
+    return [d.lstrip(".") for d in info.get("domains", [])]
+
+
 __all__ = [
     "SiteAdapter", "HttpMethod",
     "get_site_adapter", "get_preset_sites",
+    "get_crawl_types", "get_sites_by_crawl_type",
+    "recognize_crawl_type", "get_crawl_type_domains",
     "get_crawl_types", "get_sites_by_crawl_type",
     "recognize_crawl_type",
 ]

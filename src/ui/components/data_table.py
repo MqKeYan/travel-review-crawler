@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QAbstractTableModel, QSortFilterProxyModel, Signal, QEvent
 from PySide6.QtGui import QFont, QColor
 
-from src.models.review import STANDARD_FIELDS, ReviewList
+from src.models.review import STANDARD_FIELDS, _FIELD_LABEL_MAP, ReviewList
 
 
 class ReviewTableModel(QAbstractTableModel):
@@ -31,6 +31,13 @@ class ReviewTableModel(QAbstractTableModel):
         self._reviews = reviews or []
         self._fields = [k for k, _ in STANDARD_FIELDS]
         self._headers = [v for _, v in STANDARD_FIELDS]
+
+    def set_fields(self, field_keys: list[str]) -> None:
+        """动态切换显示的列（按爬取类型筛选字段）"""
+        self.beginResetModel()
+        self._fields = [k for k in field_keys if k in _FIELD_LABEL_MAP]
+        self._headers = [_FIELD_LABEL_MAP[k] for k in self._fields]
+        self.endResetModel()
 
     def rowCount(self, parent=None) -> int:
         """返回行数（评论条数）"""
@@ -175,24 +182,32 @@ class DataTable(QWidget):
         self._table_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self._table_view.verticalHeader().setDefaultSectionSize(36)
         self._table_view.verticalHeader().setVisible(False)  # 隐藏序号列
+        # 初始隐藏表头，有数据时自动显示
+        self._table_view.horizontalHeader().setVisible(False)
 
         layout.addWidget(self._table_view)
         self.setLayout(layout)
 
-    def set_reviews(self, reviews: ReviewList) -> None:
+    def set_reviews(self, reviews: ReviewList, fields: list[str] | None = None) -> None:
         """
         设置评论数据。
 
         Args:
             reviews: 标准评论对象列表
+            fields: 要显示的字段列表，None 则使用全部标准字段
         """
         self._all_reviews = list(reviews)
         self._current_page = 1
+        if fields is not None:
+            self._model.set_fields(fields)
         self._update_page()
 
     def _update_page(self) -> None:
         """更新当前页显示"""
         total = len(self._all_reviews)
+
+        # 无数据时隐藏表头
+        self._table_view.horizontalHeader().setVisible(total > 0)
 
         if total == 0:
             # 无数据时页码显示 0

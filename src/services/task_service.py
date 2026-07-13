@@ -187,7 +187,7 @@ class TaskService:
         with self._lock:
             self._tasks[task.task_name] = task
 
-        logger.info(f"创建任务 [{task.task_name}]: {config.site}-{config.task_name}")
+        logger.info(f"创建任务 [{task.task_name}]：{site_display_name}")
         self._save_to_disk()
         return task
 
@@ -204,7 +204,7 @@ class TaskService:
         with self._lock:
             return self._tasks.get(task_name)
 
-    def start_task(self, task_name: str) -> CrawlWorker | None:
+    def start_task(self, task_name: str, notifier=None) -> CrawlWorker | None:
         """
         准备启动任务（创建爬取工作线程但不启动）。
 
@@ -212,6 +212,7 @@ class TaskService:
 
         Args:
             task_name: 任务名称
+            notifier: 通知器实例（用于验证码通知等）
 
         Returns:
             CrawlWorker 实例，启动失败返回 None
@@ -232,18 +233,16 @@ class TaskService:
                 if worker:
                     task.status = TaskStatus.RUNNING
                     self._save_to_disk()
-                    logger.info(f"任务 [{task_name}] 恢复爬取")
                     return worker
 
-            # 新建 worker
-            worker = CrawlWorker(task.config)
+            # 新建 worker（传入通知器用于验证码提醒）
+            worker = CrawlWorker(task.config, notifier=notifier)
             self._workers[task_name] = worker
 
             task.status = TaskStatus.RUNNING
             task.started_at = time.strftime("%Y-%m-%d %H:%M:%S")
 
         self._save_to_disk()
-        logger.info(f"任务 [{task_name}] 开始爬取")
         return worker
 
     def pause_task(self, task_name: str) -> bool:
@@ -264,7 +263,6 @@ class TaskService:
             worker.pause()
             task.status = TaskStatus.PAUSED
             self._save_to_disk()
-            logger.info(f"任务 [{task_name}] 已暂停")
             return True
         return False
 
@@ -322,7 +320,7 @@ class TaskService:
         """
         删除任务及其爬取数据。
 
-        先停止任务（如果正在运行），再清除内存中的数据。
+        如果任务正在运行则先停止，再清除内存和磁盘数据。
 
         Args:
             task_name: 任务名称
@@ -330,7 +328,10 @@ class TaskService:
         Returns:
             True 表示删除成功
         """
-        self.stop_task(task_name)
+        # 仅运行中或暂停的任务需要先停止，其他状态直接清理
+        task = self._tasks.get(task_name)
+        if task and task.status in (TaskStatus.RUNNING, TaskStatus.PAUSED):
+            self.stop_task(task_name)
 
         with self._lock:
             self._tasks.pop(task_name, None)

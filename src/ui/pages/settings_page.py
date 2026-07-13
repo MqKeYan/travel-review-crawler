@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QLineEdit, QCheckBox, QGroupBox,
     QFormLayout, QFileDialog, QScrollArea, QComboBox, QSpinBox,
+    QButtonGroup,
 )
 from PySide6.QtCore import Qt, Signal, QEvent
 from PySide6.QtGui import QFont, QIntValidator
@@ -42,13 +43,6 @@ class SettingsPage(QWidget):
     reset_settings_requested = Signal()
     reinitialize_requested = Signal()
 
-    @staticmethod
-    def _label(text: str) -> QLabel:
-        """创建与 QLineEdit 垂直 padding 一致的标签，确保文字基线对齐"""
-        lbl = QLabel(text)
-        lbl.setStyleSheet("padding: 10px 0px;")
-        return lbl
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self._loading = False
@@ -77,14 +71,15 @@ class SettingsPage(QWidget):
         # ---- 界面主题 ----
         theme_group = QGroupBox("界面主题")
         theme_layout = QFormLayout()
-        theme_layout.setSpacing(10)
+        theme_layout.setHorizontalSpacing(15)
+        theme_layout.setVerticalSpacing(10)
 
         self._theme_combo = _ThemeComboBox()
         self._theme_combo.setMinimumWidth(200)
         for key, display in THEME_DISPLAY_NAMES.items():
             self._theme_combo.addItem(display, key)
         self._theme_combo.currentIndexChanged.connect(self._on_theme_changed)
-        theme_layout.addRow(self._label("选择主题:"), self._theme_combo)
+        theme_layout.addRow(QLabel("选择主题:"), self._theme_combo)
 
         theme_group.setLayout(theme_layout)
         layout.addWidget(theme_group)
@@ -92,42 +87,51 @@ class SettingsPage(QWidget):
         # ---- 参数默认值 ----
         crawl_group = QGroupBox("任务参数默认值")
         crawl_form = QFormLayout()
-        crawl_form.setSpacing(10)
+        crawl_form.setHorizontalSpacing(15)
+        crawl_form.setVerticalSpacing(10)
 
         count_row = QHBoxLayout()
         self._crawl_max_count = _SelectAllLineEdit()
         self._crawl_max_count.setPlaceholderText("不限")
         self._crawl_max_count.setValidator(QIntValidator(0, 99999))
-        self._crawl_max_count.setFixedWidth(100)
+        self._crawl_max_count.setFixedWidth(80)
         self._crawl_max_count.installEventFilter(self)
         count_row.addWidget(self._crawl_max_count)
-        count_row.addWidget(QLabel("条"))
+        unit1 = QLabel("条")
+        unit1.setStyleSheet("padding: 10px 0px;")
+        count_row.addWidget(unit1)
         count_row.addStretch()
-        crawl_form.addRow(self._label("默认爬取条数:"), count_row)
+        crawl_form.addRow(QLabel("默认爬取条数:"), count_row)
 
         pages_row = QHBoxLayout()
         self._crawl_max_pages = _SelectAllLineEdit()
         self._crawl_max_pages.setPlaceholderText("不限")
         self._crawl_max_pages.setValidator(QIntValidator(0, 9999))
-        self._crawl_max_pages.setFixedWidth(100)
+        self._crawl_max_pages.setFixedWidth(80)
         self._crawl_max_pages.installEventFilter(self)
         pages_row.addWidget(self._crawl_max_pages)
-        pages_row.addWidget(QLabel("页"))
+        unit2 = QLabel("页")
+        unit2.setStyleSheet("padding: 10px 0px;")
+        pages_row.addWidget(unit2)
         pages_row.addStretch()
-        crawl_form.addRow(self._label("默认最大页数:"), pages_row)
+        crawl_form.addRow(QLabel("默认最大页数:"), pages_row)
 
         delay_row = QHBoxLayout()
         self._crawl_delay = QSpinBox()
         self._crawl_delay.setRange(1, 30)
         self._crawl_delay.setValue(2)
+        self._crawl_delay.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
+        self._crawl_delay.setFixedWidth(80)
         self._crawl_delay.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._crawl_delay.installEventFilter(self)
         # 监听内部输入框的鼠标事件，实现点击空白/双击全选
         self._crawl_delay.lineEdit().installEventFilter(self)
         delay_row.addWidget(self._crawl_delay)
-        delay_row.addWidget(QLabel("秒"))
+        unit3 = QLabel("秒")
+        unit3.setStyleSheet("padding: 10px 0px;")
+        delay_row.addWidget(unit3)
         delay_row.addStretch()
-        crawl_form.addRow(self._label("默认请求间隔:"), delay_row)
+        crawl_form.addRow(QLabel("默认请求间隔:"), delay_row)
 
         filter_row = QHBoxLayout()
         filter_row.setSpacing(16)
@@ -140,9 +144,7 @@ class SettingsPage(QWidget):
         filter_row.addWidget(self._crawl_filter_pure_emoji)
         filter_row.addWidget(self._crawl_filter_ad)
         filter_row.addStretch()
-        filter_label = QLabel("默认过滤:")
-        filter_label.setStyleSheet("padding: 2px 0px;")  # 与 QCheckBox 自然高度对齐
-        crawl_form.addRow(filter_label, filter_row)
+        crawl_form.addRow(QLabel("默认过滤:"), filter_row)
 
         crawl_group.setLayout(crawl_form)
         layout.addWidget(crawl_group)
@@ -150,7 +152,8 @@ class SettingsPage(QWidget):
         # ---- 默认通知设置 ----
         notify_group = QGroupBox("默认通知设置")
         notify_form = QFormLayout()
-        notify_form.setSpacing(10)
+        notify_form.setHorizontalSpacing(15)
+        notify_form.setVerticalSpacing(10)
 
         notify_check_row = QHBoxLayout()
         notify_check_row.setSpacing(16)
@@ -159,19 +162,42 @@ class SettingsPage(QWidget):
         notify_check_row.addWidget(self._notify_popup_cb)
         notify_check_row.addWidget(self._notify_sound_cb)
         notify_check_row.addStretch()
-        notify_form.addRow(self._label("完成通知:"), notify_check_row)
+        notify_form.addRow(QLabel("完成通知:"), notify_check_row)
 
         self._notify_pushplus = _SelectAllLineEdit()
-        self._notify_pushplus.setPlaceholderText("输入 PushPlus Token（留空不推送）")
-        notify_form.addRow(self._label("PushPlus Token:"), self._notify_pushplus)
+        self._notify_pushplus.setPlaceholderText("请输入 PushPlus Token（留空则不会推送）")
+        notify_form.addRow(QLabel("PushPlus："), self._notify_pushplus)
 
         notify_group.setLayout(notify_form)
         layout.addWidget(notify_group)
 
+        # ---- 验证码通知设置 ----
+        captcha_group = QGroupBox("验证码通知")
+        captcha_form = QFormLayout()
+        captcha_form.setHorizontalSpacing(15)
+        captcha_form.setVerticalSpacing(10)
+
+        captcha_check_row = QHBoxLayout()
+        captcha_check_row.setSpacing(16)
+        self._captcha_popup_cb = QCheckBox("桌面弹窗")
+        self._captcha_sound_cb = QCheckBox("声音提示")
+        captcha_check_row.addWidget(self._captcha_popup_cb)
+        captcha_check_row.addWidget(self._captcha_sound_cb)
+        captcha_check_row.addStretch()
+        captcha_form.addRow(QLabel("验证码通知:"), captcha_check_row)
+
+        self._captcha_pushplus = _SelectAllLineEdit()
+        self._captcha_pushplus.setPlaceholderText("请输入 PushPlus Token（留空则不会推送）")
+        captcha_form.addRow(QLabel("PushPlus："), self._captcha_pushplus)
+
+        captcha_group.setLayout(captcha_form)
+        layout.addWidget(captcha_group)
+
         # ---- 代理设置 ----
         proxy_group = QGroupBox("代理设置")
         proxy_form = QFormLayout()
-        proxy_form.setSpacing(10)
+        proxy_form.setHorizontalSpacing(15)
+        proxy_form.setVerticalSpacing(10)
 
         proxy_row1 = QHBoxLayout()
         proxy_row1.setSpacing(12)
@@ -187,11 +213,11 @@ class SettingsPage(QWidget):
 
         self._proxy_http_input = _SelectAllLineEdit()
         self._proxy_http_input.setPlaceholderText("http://127.0.0.1:8080")
-        proxy_form.addRow(self._label("HTTP 代理:"), self._proxy_http_input)
+        proxy_form.addRow(QLabel("HTTP 代理:"), self._proxy_http_input)
 
         self._proxy_https_input = _SelectAllLineEdit()
         self._proxy_https_input.setPlaceholderText("http://127.0.0.1:8080")
-        proxy_form.addRow(self._label("HTTPS 代理:"), self._proxy_https_input)
+        proxy_form.addRow(QLabel("HTTPS 代理:"), self._proxy_https_input)
 
         # 测试代理按钮：底部居中
         test_row = QHBoxLayout()
@@ -210,6 +236,24 @@ class SettingsPage(QWidget):
         # ---- 导出默认设置 ----
         export_group = QGroupBox("导出默认设置")
         export_form = QFormLayout()
+        export_form.setHorizontalSpacing(15)
+        export_form.setVerticalSpacing(10)
+
+        # 默认导出格式（勾选框互斥单选）
+        format_row = QHBoxLayout()
+        format_row.setSpacing(16)
+        self._format_group = QButtonGroup(self)
+        self._format_group.setExclusive(True)
+        self._default_xlsx_cb = QCheckBox("XLSX")
+        self._default_csv_cb = QCheckBox("CSV")
+        self._default_txt_cb = QCheckBox("TXT")
+        self._default_docx_cb = QCheckBox("DOCX")
+        for cb in (self._default_xlsx_cb, self._default_csv_cb, self._default_txt_cb, self._default_docx_cb):
+            self._format_group.addButton(cb)
+            format_row.addWidget(cb)
+        self._default_xlsx_cb.setChecked(True)
+        format_row.addStretch()
+        export_form.addRow(QLabel("默认导出格式:"), format_row)
 
         self._default_path_input = _SelectAllLineEdit()
         self._default_path_input.setPlaceholderText("留空则默认使用软件目录的exports文件夹")
@@ -221,7 +265,7 @@ class SettingsPage(QWidget):
         path_layout = QHBoxLayout()
         path_layout.addWidget(self._default_path_input)
         path_layout.addWidget(browse_btn)
-        export_form.addRow(self._label("默认保存路径:"), path_layout)
+        export_form.addRow(QLabel("默认保存路径:"), path_layout)
 
         export_group.setLayout(export_form)
         layout.addWidget(export_group)
@@ -280,6 +324,9 @@ class SettingsPage(QWidget):
         self._notify_popup_cb.toggled.connect(self._auto_save)
         self._notify_sound_cb.toggled.connect(self._auto_save)
         self._notify_pushplus.textChanged.connect(self._auto_save)
+        self._captcha_popup_cb.toggled.connect(self._auto_save)
+        self._captcha_sound_cb.toggled.connect(self._auto_save)
+        self._captcha_pushplus.textChanged.connect(self._auto_save)
         self._proxy_enable_cb.toggled.connect(self._auto_save)
         self._proxy_http_input.textChanged.connect(self._auto_save)
         self._proxy_https_input.textChanged.connect(self._auto_save)
@@ -308,9 +355,13 @@ class SettingsPage(QWidget):
                 "default_desktop_popup": self._notify_popup_cb.isChecked(),
                 "default_sound": self._notify_sound_cb.isChecked(),
                 "default_pushplus_token": self._notify_pushplus.text().strip(),
+                "default_captcha_popup": self._captcha_popup_cb.isChecked(),
+                "default_captcha_sound": self._captcha_sound_cb.isChecked(),
+                "default_captcha_pushplus_token": self._captcha_pushplus.text().strip(),
             },
             "export": {
                 "default_path": self._default_path_input.text().strip(),
+                "default_format": self._get_default_format(),
             },
         }
         self.settings_updated.emit(settings)
@@ -346,10 +397,37 @@ class SettingsPage(QWidget):
         self._notify_popup_cb.setChecked(notify.get("default_desktop_popup", False))
         self._notify_sound_cb.setChecked(notify.get("default_sound", False))
         self._notify_pushplus.setText(notify.get("default_pushplus_token", ""))
+        self._captcha_popup_cb.setChecked(notify.get("default_captcha_popup", True))
+        self._captcha_sound_cb.setChecked(notify.get("default_captcha_sound", True))
+        self._captcha_pushplus.setText(notify.get("default_captcha_pushplus_token", ""))
 
         export = settings.get("export", {})
         self._default_path_input.setText(export.get("default_path", ""))
+        default_fmt = export.get("default_format", "xlsx")
+        self._set_default_format(default_fmt)
         self._loading = False
+
+    def _get_default_format(self) -> str:
+        """获取当前选中的默认导出格式"""
+        if self._default_csv_cb.isChecked():
+            return "csv"
+        if self._default_txt_cb.isChecked():
+            return "txt"
+        if self._default_docx_cb.isChecked():
+            return "docx"
+        return "xlsx"
+
+    def _set_default_format(self, fmt: str) -> None:
+        """根据设置值勾选对应的格式复选框"""
+        cb_map = {
+            "xlsx": self._default_xlsx_cb,
+            "csv": self._default_csv_cb,
+            "txt": self._default_txt_cb,
+            "docx": self._default_docx_cb,
+        }
+        cb = cb_map.get(fmt)
+        if cb:
+            cb.setChecked(True)
 
     def eventFilter(self, obj, event):
         if isinstance(obj, QSpinBox):

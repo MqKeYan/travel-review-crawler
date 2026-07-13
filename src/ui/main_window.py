@@ -159,12 +159,12 @@ class MainWindow(QMainWindow):
         self._log_page = LogPage()
         self._log_page.setMinimumWidth(600)
 
-        # 添加到栈（索引顺序对应侧边栏按钮：0=首页,1=任务,2=数据,3=设置,4=记录）
+        # 添加到栈（索引顺序对应侧边栏按钮：0=首页,1=任务,2=数据,3=记录,4=设置）
         self._stack.addWidget(self._home_page)       # 0
         self._stack.addWidget(self._task_page)       # 1
         self._stack.addWidget(self._data_page)       # 2
-        self._stack.addWidget(self._settings_page)   # 3
-        self._stack.addWidget(self._log_page)        # 4
+        self._stack.addWidget(self._log_page)        # 3
+        self._stack.addWidget(self._settings_page)   # 4
 
         # 组装主布局：侧边栏固定宽度 + 内容区弹性填满
         main_layout.addWidget(self._sidebar)
@@ -348,7 +348,7 @@ class MainWindow(QMainWindow):
         if self._stack.indexOf(self._create_task_page) != -1:
             self._stack.removeWidget(self._create_task_page)
 
-        # 跳转到目标页面（移除后索引恢复为 0=首页 1=任务 2=数据 3=设置 4=记录）
+        # 跳转到目标页面（移除后索引恢复为 0=首页 1=任务 2=数据 3=记录 4=设置）
         if page_index < self._stack.count():
             # 进入任务页时清空右侧详情面板，确保每次点击"任务管理"都显示空白
             if page_index == 1:
@@ -415,7 +415,21 @@ class MainWindow(QMainWindow):
 
     def _on_task_start(self, task_name: str) -> None:
         """启动或恢复任务"""
-        worker = self._task_service.start_task(task_name)
+        # 设置验证码通知参数（使用任务的独立通知配置）
+        task = self._task_service.get_task(task_name)
+        if task:
+            notify_config = task.config.notify_config
+            self._notifier.settings.captcha_popup = (
+                notify_config.on_captcha.desktop_popup if notify_config else True
+            )
+            self._notifier.settings.captcha_sound = (
+                notify_config.on_captcha.sound if notify_config else True
+            )
+            self._notifier.settings.captcha_pushplus_token = (
+                notify_config.on_captcha.pushplus_token if notify_config else ""
+            )
+
+        worker = self._task_service.start_task(task_name, notifier=self._notifier)
         if worker:
             if worker.isRunning():
                 # 暂停恢复：线程仍在运行，只需解除暂停
@@ -543,11 +557,10 @@ class MainWindow(QMainWindow):
         if worker:
             worker.wait()
 
-        # 刷新任务列表
+        # 刷新任务列表和数���页
         self._refresh_task_list()
+        self._refresh_data_page()
         self._task_page.refresh_detail()
-
-        logger.info(f"任务 [{task_name}] 完成，共 {count} 条，耗时 {elapsed}")
 
     def _on_task_error(self, task_name: str, error_info: str) -> None:
         """任务出错处理"""
@@ -645,7 +658,7 @@ class MainWindow(QMainWindow):
 
         # 最近任务卡片列表（按创建时间倒序取前10）
         sorted_tasks = sorted(tasks, key=lambda t: t.created_at, reverse=True)[:10]
-        from src.ui.pages.task_page import STATUS_CN
+        from src.models.task import STATUS_CN
         recent_cards = []
         for t in sorted_tasks:
             recent_cards.append({
@@ -743,7 +756,10 @@ class MainWindow(QMainWindow):
         tasks_info = []
         for name in task_names:
             stats = self._data_service.get_stats(name)
-            tasks_info.append({"name": name, "count": stats.total})
+            # 从任务配置中获取爬取类型
+            task = self._task_service.get_task(name)
+            crawl_type = task.config.crawl_type if task else ""
+            tasks_info.append({"name": name, "count": stats.total, "crawl_type": crawl_type})
 
         self._data_page.update_task_list(tasks_info)
 

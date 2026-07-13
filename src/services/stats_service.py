@@ -108,10 +108,6 @@ class StatsService:
             self._stats["sites_used"].append(site)
 
         self._save()
-        if task_name:
-            logger.info(f"任务 [{task_name}] 统计已更新: +{review_count} 评论")
-        else:
-            logger.info(f"统计已更新: +1 任务, +{review_count} 评论")
 
     def record_task_error(self) -> None:
         """记录一个任务出错"""

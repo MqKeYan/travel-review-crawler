@@ -3,7 +3,7 @@
 
 功能说明：
     - 三标签页：系统日志 / Cookie日志 / 爬虫日志
-    - 日志级别过滤（INFO/WARN/ERROR/DEBUG 复选框）
+    - 日志级别过滤（INFO/WARN/ERROR 复选框）
     - 关键词搜索
     - 智能滚动（滚轮上滑暂停，滑到底端自动恢复）
     - 实时更新（LogService Signal 驱动）
@@ -32,7 +32,6 @@ TAB_CONFIG = [
 
 # 日志级别 → HTML 显示颜色，按主题区分
 _LEVEL_COLORS: dict[int, str] = {
-    logging.DEBUG: LOG_COLORS["dark"]["DEBUG"],
     logging.INFO: LOG_COLORS["dark"]["INFO"],
     logging.WARNING: LOG_COLORS["dark"]["WARNING"],
     logging.ERROR: LOG_COLORS["dark"]["ERROR"],
@@ -164,7 +163,7 @@ class LogPage(QWidget):
 
         self._level_cbs: dict[int, QCheckBox] = {}
         for level, color in [(logging.INFO, "#00E676"), (logging.WARNING, "#FFB74D"),
-                              (logging.ERROR, "#EF5350"), (logging.DEBUG, "#42A5F5")]:
+                              (logging.ERROR, "#EF5350")]:
             name = LEVEL_NAMES.get(level, "?")
             cb = QCheckBox(name)
             cb.setFont(QFont("微软雅黑", 11))
@@ -210,7 +209,6 @@ class LogPage(QWidget):
     def set_theme(self, theme: str) -> None:
         """切换日志颜色主题并刷新显示"""
         colors = LOG_COLORS.get(theme, LOG_COLORS["dark"])
-        _LEVEL_COLORS[logging.DEBUG] = colors["DEBUG"]
         _LEVEL_COLORS[logging.INFO] = colors["INFO"]
         _LEVEL_COLORS[logging.WARNING] = colors["WARNING"]
         _LEVEL_COLORS[logging.ERROR] = colors["ERROR"]
@@ -221,7 +219,6 @@ class LogPage(QWidget):
             logging.INFO: colors["INFO"],
             logging.WARNING: colors["WARNING"],
             logging.ERROR: colors["ERROR"],
-            logging.DEBUG: colors["DEBUG"],
         }
         for level, cb in self._level_cbs.items():
             color = cb_colors.get(level, "#E0E0E0")
@@ -346,10 +343,9 @@ class LogPage(QWidget):
             logging.ERROR: _LEVEL_COLORS[logging.ERROR],
             logging.WARNING: _LEVEL_COLORS[logging.WARNING],
             logging.INFO: _LEVEL_COLORS[logging.INFO],
-            logging.DEBUG: _LEVEL_COLORS[logging.DEBUG],
         }
         parts = []
-        for level in [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG]:
+        for level in [logging.ERROR, logging.WARNING, logging.INFO]:
             c = counts.get(level, 0)
             name = LEVEL_NAMES.get(level, "?")
             color = colors.get(level, "#E0E0E0")

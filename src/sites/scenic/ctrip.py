@@ -233,7 +233,8 @@ def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
                                   stop_check=None, progress_callback=None,
                                   cookie_file=None,
                                   filter_chain=None, task_name: str = "",
-                                  driver_ref: list | None = None) -> tuple[list[dict], int]:
+                                  driver_ref: list | None = None,
+                                  notifier=None) -> tuple[list[dict], int]:
     _prefix = f"任务 [{task_name}] " if task_name else ""
     try:
         from selenium import webdriver
@@ -261,7 +262,14 @@ def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
     total_rejected = 0
 
     try:
-        driver.get(url)
+        # 构造干净 URL
+        params = extract_url_params(url)
+        clean_url = build_ctrip_url(
+            params.get("domain", "vacations.ctrip.com"),
+            params.get("id", ""),
+            params.get("location", ""),
+        )
+        driver.get(clean_url)
         wait = WebDriverWait(driver, 15)
 
         for page in range(1, max_pages + 1):
@@ -299,7 +307,6 @@ def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
                 overflow = len(all_reviews) - max_count
                 all_reviews = all_reviews[:max_count]
                 total_rejected += overflow
-            all_reviews = _dedup_reviews(all_reviews)
             new_count = len(all_reviews) - before
 
             if filter_chain:
@@ -348,24 +355,12 @@ def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
 
 # ==================== Selenium 真翻页爬取（景点） ====================
 
-
-def _dedup_reviews(reviews: list[dict]) -> list[dict]:
-    """基于用户名+内容前100字去重"""
-    seen = set()
-    result = []
-    for r in reviews:
-        key = (r.get("username", ""), r.get("content", "")[:100], r.get("time", ""))
-        if key not in seen:
-            seen.add(key)
-            result.append(r)
-    return result
-
-
 def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
                          timeout: int = 300, stop_check=None,
                          progress_callback=None, cookie_file=None,
                          filter_chain=None, task_name: str = "",
-                         driver_ref: list | None = None) -> tuple[list[dict], int]:
+                         driver_ref: list | None = None,
+                         notifier=None) -> tuple[list[dict], int]:
     _prefix = f"任务 [{task_name}] " if task_name else ""
     try:
         from selenium import webdriver
@@ -394,8 +389,21 @@ def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
     total_rejected = 0
 
     try:
-        driver.get(url)
+        # 构造干净 URL
+        params = extract_url_params(url)
+        clean_url = build_ctrip_url(
+            params.get("domain", "you.ctrip.com"),
+            params.get("id", ""),
+            params.get("location", ""),
+        )
+        driver.get(clean_url)
         wait = WebDriverWait(driver, 15)
+
+        # 翻页前切换到"最新"排序
+        latest_btn = driver.find_element(By.XPATH, "//div[@class='sortList']//span[text()='最新']")
+        driver.execute_script("arguments[0].click();", latest_btn)
+        time.sleep(1)
+        logger.info(f"{_prefix}已点击「最新」")
 
         for page in range(1, max_pages + 1):
             # 检查外部停止请求
@@ -442,7 +450,6 @@ def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
                 overflow = len(all_reviews) - max_count
                 all_reviews = all_reviews[:max_count]
                 total_rejected += overflow
-            all_reviews = _dedup_reviews(all_reviews)
             new_count = len(all_reviews) - before
 
             if filter_chain:
@@ -545,6 +552,40 @@ def _route_ctrip_crawler(url: str, max_pages: int = 10, max_count: int = 0,
         filter_chain=filter_chain, task_name=task_name,
         driver_ref=driver_ref,
     )
+
+
+# ==================== URL 构造 ====================
+
+def extract_url_params(url: str) -> dict[str, str]:
+    """从携程景点 URL 中提取关键参数（域名+资源ID）"""
+    from urllib.parse import urlparse
+    from src.sites.base import extract_resource_id
+    params = {}
+    try:
+        host = urlparse(url).netloc.lower()
+        if "vacations.ctrip.com" in host:
+            params["domain"] = "vacations.ctrip.com"
+        else:
+            params["domain"] = "you.ctrip.com"
+    except Exception:
+        pass
+    rid = extract_resource_id(url)
+    if rid:
+        params["id"] = rid
+    # 提取路径中的城市/景点名部分
+    m = re.search(r'/sight/([^/]+)/', url)
+    if m:
+        params["location"] = m.group(1)
+    return params
+
+
+def build_ctrip_url(domain: str, id: str, location: str = "") -> str:
+    """用提取的参数构造干净的携程景点 URL"""
+    if domain == "vacations.ctrip.com":
+        return f"https://vacations.ctrip.com/travel/detail/p{id}"
+    if location:
+        return f"https://you.ctrip.com/sight/{location}/{id}.html"
+    return f"https://you.ctrip.com/sight/{id}.html"
 
 
 # ==================== 适配器入口 ====================

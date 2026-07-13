@@ -45,6 +45,10 @@ class NotificationSettings:
     sound_file: str = "default"
     pushplus_token: str = ""
     pushplus_channel: str = "wechat"
+    # 验证码通知独立设置
+    captcha_popup: bool = True
+    captcha_sound: bool = False
+    captcha_pushplus_token: str = ""
 
 
 class Notifier:
@@ -96,7 +100,7 @@ class Notifier:
             elapsed: 运行时长描述
         """
         title = "爬取任务完成"
-        message = f"「{task_name}」已完成，共 {count} 条"
+        message = f"共 {count} 条"
         if elapsed:
             message += f"，耗时 {elapsed}"
 
@@ -115,6 +119,22 @@ class Notifier:
 
         self._notify_all(title, message, task_name, event="error")
 
+    def notify_captcha(self, task_name: str = "") -> None:
+        """
+        发送验证码通知，提醒用户手动完成人机验证。
+
+        通知方式与任务完成/出错一致：弹窗 + 声音 + PushPlus。
+
+        Args:
+            task_name: 任务名称
+        """
+        title = "需要人机验证"
+        message = f"「{task_name}」遇到验证码，请打开浏览器窗口手动完成验证。\n完成后爬虫将自动继续。"
+        if not task_name:
+            message = "遇到验证码，请打开浏览器窗口手动完成验证。\n完成后爬虫将自动继续。"
+
+        self._notify_all(title, message, task_name, event="captcha")
+
     def _notify_all(self, title: str, message: str, task_name: str = "", event: str = "complete") -> None:
         """
         根据设置发送所有已启用的通知通道。
@@ -125,10 +145,19 @@ class Notifier:
             task_name: 任务名称
             event: 事件类型（"complete" 或 "error"）
         """
-        if task_name:
-            logger.info(f"任务 [{task_name}] 通知 [{event}]: {title} - {message}")
-        else:
-            logger.info(f"通知 [{event}]: {title} - {message}")
+        # 验证码事件使用独立的通知设置
+        if event == "captcha":
+            if self.settings.captcha_popup:
+                self._send_desktop_popup(title, message)
+            if self.settings.captcha_sound:
+                self._play_sound()
+            if self.settings.captcha_pushplus_token:
+                # 临时替换 token 以使用验证码专用推送
+                saved_token = self.settings.pushplus_token
+                self.settings.pushplus_token = self.settings.captcha_pushplus_token
+                self._send_pushplus(title, message)
+                self.settings.pushplus_token = saved_token
+            return
 
         if self.settings.desktop_popup:
             self._send_desktop_popup(title, message)

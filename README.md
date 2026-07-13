@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Release-v0.4.1-brightgreen"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Release-v0.5.0-brightgreen"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey"></a>
   <a href="#"><img src="https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white"></a>
   <a href="#"><img src="https://img.shields.io/badge/PySide6-6.8+-41CD52?logo=qt&logoColor=white"></a>
@@ -21,7 +21,7 @@
 
 | 功能 | 说明 |
 |------|------|
-| 🌐 多平台支持 | 携程、飞猪，预设站点适配器 |
+| 🌐 多平台支持 | 携程(景点/酒店)、飞猪、淘宝/天猫，预设站点适配器 |
 | 🍪 Cookie 管理 | 一键拉取系统浏览器（Edge / Chrome / Firefox）的登录 Cookie，按平台分类存储 |
 | 🖼️ 图片下载 | 评论图片多线程下载到本地，DOCX 导出时自动嵌入 |
 | 📤 多格式导出 | TXT · CSV · XLSX · DOCX，支持关键字过滤、图片过滤、纯表情过滤 |
@@ -34,8 +34,10 @@
 
 | 平台 | 爬取模式 | 验证码处理 |
 |------|----------|-----------|
-| 携程 | requests（首页）+ Selenium 点击翻页（后续页） | 暂未发现需求 |
+| 携程(景点) | requests（首页）+ Selenium 点击翻页（后续页） | 暂未发现需求 |
 | 飞猪 | Selenium 滚动加载 | 滑块自动过 |
+| 淘宝/天猫 | Selenium 滚动加载 | 手动处理 |
+| 携程(酒店) | requests（首页）+ Selenium 翻页 | 暂未发现需求 |
 
 ## 系统要求
 
@@ -97,7 +99,7 @@ src/                                # 源代码根目录
 │   ├── browser.py                  # 浏览器驱动封装：Selenium WebDriver 生命周期管理
 │   ├── crawler.py                  # 通用爬虫引擎：分页、重试、UA 伪装、Cookie 注入
 │   ├── cookie_manager.py           # Cookie 管理：拉取系统浏览器本地 Cookie 数据库
-│   ├── captcha_solver.py           # 滑块验证码自动求解：Canny 边缘检测 + 人类轨迹模拟
+│   ├── captcha_handler.py           # 验证码检测与用户手动处理调度
 │   ├── image_downloader.py         # 评论图片批量下载：多线程并发、自动重试
 │   ├── ua_spoofer.py               # User-Agent 随机伪装池
 │   └── notifier.py                 # 桌面通知 + PushPlus 微信推送
@@ -112,8 +114,9 @@ src/                                # 源代码根目录
 │   ├── hotel/                      # 酒店民宿分类
 │   │   ├── __init__.py             # register_adapters() 聚合入口
 │   │   └── ctrip_hotel.py          # 携程酒店：requests 首页 + Selenium 翻页
-│   └── shopping/                   # 购物网站分类（预留）
-│       └── __init__.py             # register_adapters() 返回空字典
+│   └── shopping/                   # 购物网站分类
+│       ├── __init__.py             # register_adapters() 聚合入口
+│       └── taobao.py               # 淘宝/天猫：Selenium 滚动翻页 + 时间排序 + 评论侧边面板
 │
 ├── ui/                             # PySide6 桌面界面层
 │   ├── main_window.py              # 暗夜绿三栏主窗口 + QSystemTrayIcon 系统托盘
@@ -177,6 +180,7 @@ src/                                # 源代码根目录
 │   ├── paths.py                    # 运行目录管理：exe 目录 vs %APPDATA% 自适应
 │   ├── logger.py                   # 日志系统：按日切割 + 自动清理过期日志
 │   ├── image_utils.py              # 图像处理：缩放、格式转换
+│   ├── url_cleaner.py              # URL 参数清洗：去除追踪参数，构造干净链接
 │   ├── exceptions.py               # 自定义异常：NetworkError / ParseError / RateLimitError 等
 │   └── __init__.py
 │

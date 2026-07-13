@@ -54,6 +54,9 @@ DEFAULT_SETTINGS = {
         "default_desktop_popup": True,
         "default_sound": False,
         "default_pushplus_token": "",
+        "default_captcha_popup": True,
+        "default_captcha_sound": False,
+        "default_captcha_pushplus_token": "",
     },
     "proxy": {
         "enabled": False,

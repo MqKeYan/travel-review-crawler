@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 
-from src.models.task import Task, TaskStatus
+from src.models.task import Task, TaskStatus, STATUS_CN
 from src.ui.components.task_card import TaskCard
 from src.ui.components.progress_bar import ProgressBar
 
@@ -37,17 +37,6 @@ class _TaskListContainer(QWidget):
         child = self.childAt(event.position().toPoint())
         if child is None or child is self:
             self.empty_clicked.emit()
-
-# 中文状态映射
-STATUS_CN = {
-    TaskStatus.PENDING: "待开始",
-    TaskStatus.RUNNING: "运行中",
-    TaskStatus.PAUSED: "已暂停",
-    TaskStatus.COMPLETED: "已完成",
-    TaskStatus.ERROR: "出错",
-    TaskStatus.CANCELLED: "已取消",
-}
-
 
 class TaskPage(QWidget):
     """

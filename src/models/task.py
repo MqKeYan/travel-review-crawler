@@ -32,6 +32,17 @@ class TaskStatus(Enum):
     CANCELLED = "cancelled"    # 已取消
 
 
+# 状态 → 中文显示名称
+STATUS_CN = {
+    TaskStatus.PENDING: "待开始",
+    TaskStatus.RUNNING: "运行中",
+    TaskStatus.PAUSED: "已暂停",
+    TaskStatus.COMPLETED: "已完成",
+    TaskStatus.ERROR: "出错",
+    TaskStatus.CANCELLED: "已取消",
+}
+
+
 # ==================== 任务配置类 ====================
 
 @dataclass
@@ -125,6 +136,7 @@ class NotifyConfig:
     """
     on_complete: NotifySetting = field(default_factory=NotifySetting)
     on_error: NotifySetting = field(default_factory=NotifySetting)
+    on_captcha: NotifySetting = field(default_factory=NotifySetting)
 
 
 @dataclass
@@ -288,6 +300,7 @@ class Task:
 
         notify_on_complete = notify_.get("on_complete", {})
         notify_on_error = notify_.get("on_error", {})
+        notify_on_captcha = notify_.get("on_captcha", {})
         notify_config = NotifyConfig(
             on_complete=NotifySetting(
                 desktop_popup=notify_on_complete.get("desktop_popup", True),
@@ -298,6 +311,11 @@ class Task:
                 desktop_popup=notify_on_error.get("desktop_popup", True),
                 sound=notify_on_error.get("sound", True),
                 pushplus_token=notify_on_error.get("pushplus_token", ""),
+            ),
+            on_captcha=NotifySetting(
+                desktop_popup=notify_on_captcha.get("desktop_popup", True),
+                sound=notify_on_captcha.get("sound", True),
+                pushplus_token=notify_on_captcha.get("pushplus_token", ""),
             ),
         )
 

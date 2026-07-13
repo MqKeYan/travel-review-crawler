@@ -338,6 +338,7 @@ def crawl_all_pages(
     filter_chain=None,
     task_name: str = "",
     driver_ref: list | None = None,
+    notifier=None,
 ) -> tuple[list[dict], int]:
     """
     爬取指定网站的全部评论数据（多页自动翻页）。
@@ -392,8 +393,10 @@ def crawl_all_pages(
                     filter_chain=filter_chain,
                     task_name=task_name,
                     driver_ref=driver_ref,
+                    notifier=notifier,
                 )
             except TypeError:
+                # 旧版 selenium_crawler 不支持 filter_chain/driver_ref/notifier
                 raw_reviews = adapter.selenium_crawler(
                     url=target_url,
                     max_pages=page_limit,
@@ -403,7 +406,6 @@ def crawl_all_pages(
                     progress_callback=progress_callback,
                     cookie_file=cookie_file,
                     task_name=task_name,
-                    driver_ref=driver_ref,
                 )
         except Exception as e:
             logger.error(f"{_prefix}Selenium 翻页失败: {e}")

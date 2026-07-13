@@ -253,7 +253,6 @@ def load_cookies_from_file(platform: str, cookie_name: str) -> list[dict] | None
         data = json.load(f)
 
     cookies = data.get("cookies", [])
-    logger.info(f"Cookie 已加载: {platform}/{cookie_name}.json ({len(cookies)} 条)")
     return cookies
 
 

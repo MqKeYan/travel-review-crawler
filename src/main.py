@@ -19,6 +19,7 @@
 
 import sys
 import os
+import signal
 import traceback
 
 # 确保项目根目录在 Python 路径中最前面
@@ -130,13 +131,7 @@ def main() -> int:
     Returns:
         进程退出码
     """
-    # ---- 高 DPI 配置 ----
-    setup_high_dpi()
-
-    # ---- 全局异常处理 ----
-    sys.excepthook = global_exception_handler
-
-    # ---- 屏蔽 Qt 内部已知无害警告 ----
+    # ---- 屏蔽 Qt 内部已知无害警告（必须在任何 PySide6 调用前安装） ----
     from PySide6.QtCore import qInstallMessageHandler, QtMsgType
 
     _SUPPRESSED_QT_PATTERNS = [
@@ -154,6 +149,12 @@ def main() -> int:
 
     qInstallMessageHandler(_qt_message_handler)
 
+    # ---- 高 DPI 配置 ----
+    setup_high_dpi()
+
+    # ---- 全局异常处理 ----
+    sys.excepthook = global_exception_handler
+
     # ---- 创建应用 ----
     from PySide6.QtWidgets import QApplication as QA
 
@@ -164,6 +165,16 @@ def main() -> int:
     # 显式声明：最后一个窗口关闭时退出应用
     # 配合 closeEvent 中的线程清理，确保彻底退出
     app.setQuitOnLastWindowClosed(True)
+
+    # ---- Ctrl+C 优雅退出 ----
+    # Windows 上 Qt 事件循环阻塞导致 SIGINT 无法被 Python 正常处理，
+    # 通过定时器定期唤醒事件循环，让信号有机会被投递
+    signal.signal(signal.SIGINT, lambda signum, frame: app.quit())
+
+    from PySide6.QtCore import QTimer
+    _sig_timer = QTimer()
+    _sig_timer.timeout.connect(lambda: None)  # 空回调，仅用于唤醒事件循环处理信号
+    _sig_timer.start(200)
 
     # 禁止未聚焦的输入控件响应滚轮（防止滚动页面时误改数值）
     from PySide6.QtCore import QEvent, QObject

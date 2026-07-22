@@ -26,8 +26,6 @@ logger = logging.getLogger("tour-crawler.cookie_manager")
 
 # ==================== Selenium 驱动浏览器提取 Cookie ====================
 
-# 指示登录成功的 Cookie 名称关键词（任意一个出现即视为已登录）
-_LOGIN_COOKIE_NAMES = {"cticket", "login_uid", "S_token", "token", "sid", "dper", "unb"}
 _LOGIN_WAIT_TIMEOUT = 600  # 登录等待超时（秒）
 
 # 按优先级排列的浏览器驱动列表
@@ -87,12 +85,13 @@ def open_browser_wait_for_login_auto(
     domain: str,
     status_callback=None,
     timeout: int = None,
+    login_cookie_names: tuple = (),
 ) -> list[dict]:
     """
     一步完成：打开浏览器 → 等待用户登录（自动检测）→ 提取 Cookie → 关闭浏览器。
 
     检测登录的依据（任一满足即视为登录成功）：
-    1. 浏览器中出现 {cticket, login_uid, S_token, token, sid} 中的任意 Cookie
+    1. 浏览器中出现登录态 Cookie（全局默认 + 站点特定）
     2. 浏览器 URL 离开了登录页且已出现登录态 Cookie
 
     Args:
@@ -100,6 +99,7 @@ def open_browser_wait_for_login_auto(
         domain: Cookie 所属域名
         status_callback: 可选状态回调函数 status(text)
         timeout: 超时秒数，默认 600 秒（10 分钟）
+        login_cookie_names: 站点特定的登录态 Cookie 名称元组
 
     Returns:
         Cookie 字典列表 [{name, value, domain, path}]，超时或失败返回空列表
@@ -107,6 +107,8 @@ def open_browser_wait_for_login_auto(
     import time
     global _selenium_driver
     timeout = timeout or _LOGIN_WAIT_TIMEOUT
+    # 使用站点专用的登录 Cookie 名称（不做全局合并，保持专一有效）
+    effective_cookie_names = set(login_cookie_names)
 
     logger.info(f"开始获取 Cookie: domain={domain}, login_url={login_url}")
 
@@ -147,7 +149,7 @@ def open_browser_wait_for_login_auto(
                 # 检测：URL 离开登录页 且 出现登录态 Cookie（双重条件防误判）
                 current_base = current_url.split("?")[0].split("#")[0]
                 url_left_login = login_page_base not in current_base and current_base != login_page_base
-                has_login_cookie = bool(cookie_names & _LOGIN_COOKIE_NAMES)
+                has_login_cookie = bool(cookie_names & effective_cookie_names)
 
                 if url_left_login and has_login_cookie:
                     login_detected = True
@@ -220,7 +222,6 @@ def save_cookies_to_file(platform: str, cookie_name: str, cookies: list[dict], b
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-    logger.info(f"Cookie 已保存到文件: {platform}/{cookie_name}.json ({len(cookies)} 条, 来源={browser_name})")
     return filepath
 
 

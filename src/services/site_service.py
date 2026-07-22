@@ -59,6 +59,7 @@ class SiteService:
             "display_name": adapter.site_display_name,
             "domain": adapter.domain,
             "login_url": adapter.login_url,
+            "cookie_platform": adapter.cookie_platform or adapter.site_name,
         }
 
     def get_crawl_types(self) -> list[dict]:

@@ -22,6 +22,8 @@ from src.utils.paths import get_tasks_dir
 from src.sites import get_site_adapter
 
 logger = logging.getLogger("tour-crawler.task_service")
+# 任务管理操作（创建/删除/错误）用独立 logger，归入任务记录而非爬虫记录
+_task_logger = logging.getLogger("tour-crawler.task_manager")
 
 # 进度过期天数（7 天）
 _PROGRESS_EXPIRE_DAYS = 7
@@ -71,7 +73,7 @@ class TaskService:
                 with open(filepath, "w", encoding="utf-8") as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
             except Exception:
-                logger.exception(f"保存任务 [{task.task_name}] 到磁盘失败")
+                _task_logger.exception(f"保存任务 [{task.task_name}] 到磁盘失败")
 
     def _load_from_disk(self) -> None:
         """
@@ -115,7 +117,7 @@ class TaskService:
                 self._tasks[task.task_name] = task
 
             except Exception:
-                logger.exception(f"从磁盘加载任务文件失败: {filepath}")
+                _task_logger.exception(f"从磁盘加载任务文件失败: {filepath}")
 
     # ==================== 查询 ====================
 
@@ -187,7 +189,7 @@ class TaskService:
         with self._lock:
             self._tasks[task.task_name] = task
 
-        logger.info(f"创建任务 [{task.task_name}]：{site_display_name}")
+        _task_logger.info(f"创建任务 [{task.task_name}]：{site_display_name}")
         self._save_to_disk()
         return task
 
@@ -220,12 +222,21 @@ class TaskService:
         with self._lock:
             task = self._tasks.get(task_name)
             if task is None:
-                logger.warning(f"任务不存在: {task_name}")
+                _task_logger.warning(f"任务不存在: {task_name}")
                 return None
 
             if task.status == TaskStatus.RUNNING:
-                logger.warning(f"任务正在运行中，无法重复启动: {task.status.value}")
+                _task_logger.warning(f"任务正在运行中，无法重复启动: {task.status.value}")
                 return None
+
+            # 已完成任务重新启动 → 删除断点进度文件，从头开始
+            if task.status == TaskStatus.COMPLETED:
+                progress_file = get_tasks_dir() / f"{task_name}_progress.json"
+                try:
+                    if progress_file.exists():
+                        progress_file.unlink()
+                except Exception:
+                    pass
 
             # 暂停状态 → 恢复，不创建新 worker
             if task.status == TaskStatus.PAUSED:
@@ -342,9 +353,9 @@ class TaskService:
             if filepath.exists():
                 filepath.unlink()
         except Exception:
-            logger.exception(f"删除任务文件失败: {task_name}")
+            _task_logger.exception(f"删除任务文件失败: {task_name}")
 
-        logger.info(f"任务 [{task_name}] 已删除")
+        _task_logger.info(f"任务 [{task_name}] 已删除")
         return True
 
     def get_worker(self, task_name: str) -> CrawlWorker | None:

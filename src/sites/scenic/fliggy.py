@@ -163,9 +163,13 @@ def selenium_crawl_fliggy(
     stop_check=None,
     progress_callback=None,
     cookie_file: str | None = None,
+    filter_chain=None,
     task_name: str = "",
     driver_ref: list | None = None,
     notifier=None,
+    resume_page: int = 0,
+    resume_count: int = 0,
+    delay_seconds: float = 2.0,
 ) -> list[dict]:
     """
     飞猪评论爬虫（阿里系平台，使用最小化窗口 + 验证码通知）：
@@ -281,6 +285,12 @@ def selenium_crawl_fliggy(
 
         dry_count = 0
         seen_keys = set()
+        skipped_count = 0  # 断点续爬：已跳过的评论数
+
+        # 断点续爬提示
+        if resume_count > 0:
+            logger.info(f"{_prefix}飞猪: 断点续爬，跳过前 {resume_count} 条已收集评论")
+
         while True:
             if stop_check and stop_check():
                 break
@@ -308,13 +318,16 @@ def selenium_crawl_fliggy(
                 driver.execute_script("window.scrollBy(0, 1200);")
             time.sleep(2)
 
-            # 提取当前所有评论，仅保留新评论
+            # 提取当前所有评论，仅保留新评论（断点续爬跳过前 resume_count 条）
             page_reviews = extract_fliggy_reviews_from_dom(driver)
             new_reviews = []
             for r in page_reviews:
                 key = (r.get("username", ""), r.get("content", ""), r.get("time", ""))
                 if key not in seen_keys:
                     seen_keys.add(key)
+                    if skipped_count < resume_count:
+                        skipped_count += 1
+                        continue  # 跳过已爬过的评论
                     new_reviews.append(r)
 
             before = len(all_reviews)
@@ -322,14 +335,15 @@ def selenium_crawl_fliggy(
             if max_count and len(all_reviews) > max_count:
                 all_reviews = all_reviews[:max_count]
             new_count = len(all_reviews) - before
+            total_display = resume_count + len(all_reviews)  # 含已爬过的总数
 
             batch += 1
-            logger.info(f"{_prefix}飞猪 第{batch}批: 提取{len(page_reviews)}条 (新增{new_count}，累计{len(all_reviews)})")
+            logger.info(f"{_prefix}飞猪 第{batch}批: 提取{len(page_reviews)}条 (新增{new_count}，累计{total_display})")
 
             if progress_callback:
                 progress_callback(
-                    page_num=batch, count=new_count, total=len(all_reviews),
-                    message=f"滚动加载中... (累计 {len(all_reviews)} 条)"
+                    page_num=batch, count=new_count, total=total_display,
+                    message=f"滚动加载中... (累计 {total_display} 条)"
                 )
 
             if max_count and len(all_reviews) >= max_count:
@@ -396,4 +410,5 @@ def create_fliggy_adapter() -> SiteAdapter:
         raw_html_parser=extract_fliggy_reviews,
         selenium_crawler=selenium_crawl_fliggy,
         field_mapping={},
+        login_cookie_names=("login_uid", "S_token", "dper", "unb", "cookie2"),
     )

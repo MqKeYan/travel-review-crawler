@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Release-v0.5.0-brightgreen"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Release-v0.6.0-brightgreen"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Windows%2010%2F11%20x64-lightgrey"></a>
   <a href="#"><img src="https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white"></a>
   <a href="#"><img src="https://img.shields.io/badge/PySide6-6.8+-41CD52?logo=qt&logoColor=white"></a>
@@ -112,14 +112,19 @@ src/                                # 源代码根目录
 │   ├── __init__.py                 # 适配器注册表 + URL 自动识别爬取类型
 │   ├── scenic/                     # 旅游景点分类
 │   │   ├── __init__.py             # register_adapters() 聚合入口
-│   │   ├── ctrip.py                # 携程景区：requests 首页 + Selenium 翻页
-│   │   └── fliggy.py               # 飞猪景区：Selenium 滚动加载 + 滑块验证码
+│   │   ├── _ctrip_base.py          # 携程共享：DOM 提取 + URL 工具
+│   │   ├── ctrip.py                # 携程景点（you.ctrip.com）：requests 首页 + Selenium 翻页
+│   │   ├── ctrip_vacation.py       # 携程旅游（vacations.ctrip.com）：Selenium 翻页 + DOM 解析
+│   │   └── fliggy.py               # 飞猪：Selenium 滚动加载 + 验证码通知
 │   ├── hotel/                      # 酒店民宿分类
 │   │   ├── __init__.py             # register_adapters() 聚合入口
 │   │   └── ctrip_hotel.py          # 携程酒店：requests 首页 + Selenium 翻页
 │   └── shopping/                   # 购物网站分类
 │       ├── __init__.py             # register_adapters() 聚合入口
-│       └── taobao.py               # 淘宝/天猫：Selenium 滚动翻页 + 时间排序 + 评论侧边面板
+│       ├── _ali_base.py            # 阿里系共享：Selenium 爬虫 + Cookie 注入 + DOM 提取
+│       ├── taobao.py               # 淘宝（item.taobao.com）：滚动翻页 + 时间排序
+│       ├── tmall.py                # 天猫（detail.tmall.com）：与淘宝共用爬虫核心
+│       └── jd.py                   # 京东（item.jd.com）：全部评价→最新→滚动翻页
 │
 ├── ui/                             # PySide6 桌面界面层
 │   ├── main_window.py              # 暗夜绿三栏主窗口 + QSystemTrayIcon 系统托盘

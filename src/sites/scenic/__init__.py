@@ -4,9 +4,11 @@
 功能说明：
     - 聚合旅游景点分类下的所有站点适配器
     - 提供 register_adapters() 供父级注册表调用
+    - 当前包含：携程（景点/旅游）、飞猪
 """
 
 from src.sites.scenic.ctrip import create_ctrip_adapter
+from src.sites.scenic.ctrip_vacation import create_ctrip_vacation_adapter
 from src.sites.scenic.fliggy import create_fliggy_adapter
 
 
@@ -18,8 +20,13 @@ def register_adapters() -> dict:
         {site_name: SiteAdapter} 字典
     """
     ctrip = create_ctrip_adapter()
+    ctrip_vacation = create_ctrip_vacation_adapter()
     fliggy = create_fliggy_adapter()
-    return {ctrip.site_name: ctrip, fliggy.site_name: fliggy}
+    return {
+        ctrip.site_name: ctrip,
+        ctrip_vacation.site_name: ctrip_vacation,
+        fliggy.site_name: fliggy,
+    }
 
 
-__all__ = ["register_adapters", "create_ctrip_adapter", "create_fliggy_adapter"]
+__all__ = ["register_adapters"]

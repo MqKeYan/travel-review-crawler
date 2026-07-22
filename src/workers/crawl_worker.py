@@ -17,6 +17,7 @@ Signal 接口：
 import time
 import json
 import logging
+from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
@@ -82,6 +83,7 @@ class CrawlWorker(QThread):
         # 断点信息
         self._resume_page = 0         # 断点续爬的起始页码
         self._resume_count = 0        # 断点续爬的已有条数
+        self._last_saved_page = 0     # 上次保存进度的页码，避免重复写入
 
         # 计时
         self._start_time: float = 0.0
@@ -150,6 +152,10 @@ class CrawlWorker(QThread):
                 }
                 self.progress.emit(progress_data)
 
+                # 每页完成后保存断点进度
+                if page_num and total:
+                    self._save_progress(page_num, total_count)
+
             # 传递 driver 引用，供外部在异常情况下清理浏览器
             driver_ref: list = []
             self._driver = driver_ref
@@ -167,6 +173,8 @@ class CrawlWorker(QThread):
                 task_name=task_id,
                 driver_ref=driver_ref,
                 notifier=self._notifier,
+                resume_page=self._resume_page,
+                resume_count=self._resume_count,
             )
 
             self._reviews = reviews
@@ -208,6 +216,9 @@ class CrawlWorker(QThread):
             elapsed_str = f"{elapsed:.0f}秒" if elapsed < 60 else f"{elapsed/60:.1f}分钟"
 
             self._log_message(f"任务 [{task_id}] 完成，共 {len(self._reviews)} 条，耗时 {elapsed_str}")
+
+            # 任务完成，删除断点进度文件
+            self._delete_progress()
 
             self.complete.emit({
                 "task_name": self._config.task_name,
@@ -268,17 +279,17 @@ class CrawlWorker(QThread):
             QThread.msleep(200)  # 200ms 检查一次
         return self._stopped
 
+    def _progress_file_path(self) -> Path:
+        """获取断点进度文件路径"""
+        return get_tasks_dir() / f"{self._config.task_name}_progress.json"
+
     def _check_resume_point(self) -> None:
         """
         检查是否存在断点续爬文件。
 
         如果存在，读取已保存的进度信息，设置 resume_page 和 resume_count。
-        进度文件格式见软件大纲 4.7.0 节。
         """
-        # 使用任务名生成断点文件路径
-        task_id = self._config.task_name
-        progress_file = get_tasks_dir() / f"{task_id}_progress.json"
-
+        progress_file = self._progress_file_path()
         if progress_file.exists():
             try:
                 with open(progress_file, "r", encoding="utf-8") as f:
@@ -288,6 +299,32 @@ class CrawlWorker(QThread):
             except (json.JSONDecodeError, OSError):
                 self._resume_page = 0
                 self._resume_count = 0
+
+    def _save_progress(self, page_num: int, count: int) -> None:
+        """保存断点进度到磁盘（每页完成后调用）"""
+        if page_num == self._last_saved_page:
+            return  # 避免重复写入同一页
+        self._last_saved_page = page_num
+        data = {
+            "current_page": page_num,
+            "current_count": count,
+            "task_name": self._config.task_name,
+            "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        try:
+            with open(self._progress_file_path(), "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass  # 进度保存失败不影响爬取
+
+    def _delete_progress(self) -> None:
+        """删除断点进度文件（任务完成时调用）"""
+        try:
+            pf = self._progress_file_path()
+            if pf.exists():
+                pf.unlink()
+        except Exception:
+            pass
 
     def _log_message(self, message: str) -> None:
         """发送日志信号"""

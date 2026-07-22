@@ -91,6 +91,10 @@ class SiteAdapter:
     # URL 校验器 (url: str) -> (bool, str)
     # 校验用户输入的 URL 是否被该适配器支持，返回 (是否有效, 错误消息)
     url_validator: callable = None
+    # 登录态 Cookie 名称集合（用于浏览器登录检测），空则仅使用全局默认名称
+    login_cookie_names: tuple = ()
+    # Cookie 存储平台标识（空则使用 site_name），用于多适配器共用同一 Cookie 目录
+    cookie_platform: str = ""
 
 
 def parse_response(response, adapter: SiteAdapter) -> list[dict]:

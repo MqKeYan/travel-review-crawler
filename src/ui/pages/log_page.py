@@ -26,7 +26,8 @@ from src.ui.theme.dark_forest_theme import LOG_COLORS
 TAB_CONFIG = [
     ("system", "系统记录", "system", "此页显示全部系统活动记录。"),
     ("cookie", "Cookie 记录", "cookie", "此页显示 Cookie 获取、保存、加载与删除记录。"),
-    ("crawler", "爬虫记录", "crawler", "此页显示爬虫任务运行、验证码求解、图片下载记录。"),
+    ("task", "任务记录", "task", "此页显示任务创建、删除、启停等生命周期记录。"),
+    ("crawler", "爬虫记录", "crawler", "此页显示爬虫运行、验证码求解、图片下载记录。"),
     ("export", "导出记录", "export", "此页显示数据导出任务与文件生成记录。"),
 ]
 

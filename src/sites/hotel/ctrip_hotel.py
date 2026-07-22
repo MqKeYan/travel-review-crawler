@@ -215,6 +215,9 @@ def selenium_crawl_ctrip_hotel(
     task_name: str = "",
     driver_ref: list | None = None,
     notifier=None,
+    resume_page: int = 0,
+    resume_count: int = 0,
+    delay_seconds: float = 2.0,
 ) -> tuple[list[dict], int]:
     """通过 Selenium 翻页爬取携程酒店评论"""
     _prefix = f"任务 [{task_name}] " if task_name else ""
@@ -236,6 +239,8 @@ def selenium_crawl_ctrip_hotel(
     options.add_argument("--no-sandbox")
 
     from src.engine.browser import create_edge_driver
+    from src.sites.scenic._ctrip_base import inject_ctrip_cookies
+
     driver = create_edge_driver(options)
     if driver_ref is not None:
         driver_ref.append(driver)
@@ -243,6 +248,9 @@ def selenium_crawl_ctrip_hotel(
     total_rejected = 0
 
     try:
+        # 注入 Cookie（统一从 ctrip 目录读取）
+        inject_ctrip_cookies(driver, cookie_file)
+
         # 构造干净 URL
         params = extract_url_params(url)
         clean_url = build_ctrip_hotel_url(
@@ -264,7 +272,23 @@ def selenium_crawl_ctrip_hotel(
         except Exception:
             logger.warning(f"{_prefix}等待酒店评论加载超时")
 
-        for page in range(1, max_pages + 1):
+        # 断点续爬：快速翻到 resume_page
+        start_page = resume_page if resume_page > 1 else 1
+        if start_page > 1:
+            logger.info(f"{_prefix}断点续爬：跳过前 {start_page - 1} 页，从第 {start_page} 页开始")
+            for _ in range(1, start_page):
+                if stop_check and stop_check():
+                    break
+                try:
+                    if not _click_next_page(driver):
+                        logger.warning(f"{_prefix}断点续爬：无法翻到第 {start_page} 页，从当前位置开始")
+                        break
+                    time.sleep(0.5)
+                except Exception:
+                    logger.warning(f"{_prefix}断点续爬：翻页异常，从当前位置开始")
+                    break
+
+        for page in range(start_page, max_pages + 1):
             if stop_check and stop_check():
                 logger.info(f"{_prefix}Selenium 翻页被外部停止")
                 break
@@ -385,4 +409,6 @@ def create_ctrip_hotel_adapter() -> SiteAdapter:
         selenium_crawler=selenium_crawl_ctrip_hotel,
         url_validator=_validate_ctrip_hotel_url,
         field_mapping={},
+        login_cookie_names=("cticket",),
+        cookie_platform="ctrip",
     )

@@ -135,6 +135,7 @@ class CreateTaskPage(QWidget):
         self._all_sites = sites
         self._sites = sites  # 保留兼容（实际使用 _all_sites）
         self._cookie_site: str = ""
+        self._cookie_platform: str = ""  # Cookie 实际存储目录（可能与 site_name 不同）
         self._has_cookie: bool = False
         self._existing_task_names: set[str] = set()
         self._defaults: dict = {}
@@ -379,8 +380,10 @@ class CreateTaskPage(QWidget):
 
     def _refresh_cookie_list(self) -> None:
         self._cookie_switch.clear()
-        if self._cookie_site:
-            platform_dir = get_cookie_platform_dir(self._cookie_site)
+        # 使用 cookie_platform（如携程系统一用 "ctrip"），fallback 到 site_name
+        platform = self._cookie_platform or self._cookie_site
+        if platform:
+            platform_dir = get_cookie_platform_dir(platform)
             if platform_dir.exists():
                 for f in sorted(platform_dir.glob("*.json")):
                     name = f.stem
@@ -411,6 +414,7 @@ class CreateTaskPage(QWidget):
 
         # 清空 Cookie 状态
         self._cookie_site = ""
+        self._cookie_platform = ""
         self._has_cookie = False
         self._cookie_label.setText("未使用 Cookie")
         self._cookie_label.setStyleSheet("color: #555555; font-size: 12px;")
@@ -419,6 +423,13 @@ class CreateTaskPage(QWidget):
     def _on_site_changed(self) -> None:
         site = self._site_combo.currentData()
         self._cookie_site = site or ""
+        # 解析站点适配器的 cookie_platform（如 ctrip_hotel → ctrip）
+        self._cookie_platform = ""
+        if site:
+            from src.sites import get_site_adapter
+            adapter = get_site_adapter(site)
+            if adapter:
+                self._cookie_platform = adapter.cookie_platform
         self._has_cookie = False
         self._cookie_label.setText("未使用 Cookie")
         self._cookie_label.setStyleSheet("color: #555555; font-size: 12px;")
@@ -435,24 +446,16 @@ class CreateTaskPage(QWidget):
             return
 
         # 先识别爬取类型
-        from src.sites import recognize_crawl_type, get_sites_by_crawl_type, get_crawl_type_domains
+        from src.sites import recognize_crawl_type
         matched_crawl_type = recognize_crawl_type(text)
 
-        # 在全量站点中匹配域名（同时检查适配器 domain 和爬取类型域名列表）
+        # 在全量站点中用各自的域名匹配
         matched_site = None
-        type_domains = get_crawl_type_domains(matched_crawl_type) if matched_crawl_type else []
-
         for site in self._all_sites:
             domain = site.get("domain", "")
-            # 检查是否匹配适配器域名或爬取类型域名列表
-            site_domains = [domain.lstrip(".")] if domain else []
-            if matched_crawl_type and site.get("crawl_type") == matched_crawl_type:
-                site_domains = list(set(site_domains + type_domains))
-            for d in site_domains:
-                if d and host.endswith(d):
-                    matched_site = site
-                    break
-            if matched_site:
+            site_domain = domain.lstrip(".") if domain else ""
+            if site_domain and host.endswith(site_domain):
+                matched_site = site
                 break
 
         matched_site_name = matched_site["name"]

@@ -52,18 +52,22 @@ class CookieService:
             return False
 
         domain = adapter.domain
+        login_cookie_names = adapter.login_cookie_names
 
         try:
             cookies = open_browser_wait_for_login_auto(
                 login_url, domain,
                 status_callback=status_callback,
+                login_cookie_names=login_cookie_names,
             )
             if not cookies:
                 logger.warning("未获取到 Cookie（超时或取消）")
                 return False
 
-            save_cookies_to_file(platform, cookie_name, cookies, "selenium-auto")
-            logger.info(f"Cookie 自动保存成功: {platform}/{cookie_name} ({len(cookies)} 条)")
+            # 使用适配器指定的 cookie_platform（如携程系统一用 "ctrip"）
+            cookie_platform = adapter.cookie_platform or platform
+            save_cookies_to_file(cookie_platform, cookie_name, cookies, "selenium-auto")
+            logger.info(f"Cookie 自动保存成功: {cookie_name}")
             return True
 
         except CookieExtractError as e:

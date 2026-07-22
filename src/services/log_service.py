@@ -45,7 +45,7 @@ class LogEntry:
         判断日志是否属于指定分类。
 
         Args:
-            category: "system" | "cookie" | "crawler" | "export"
+            category: "system" | "cookie" | "task" | "crawler" | "export"
 
         Returns:
             True 表示属于该分类
@@ -53,8 +53,11 @@ class LogEntry:
         name_lower = self.logger_name.lower()
         if category == "cookie":
             return "cookie" in name_lower
+        elif category == "task":
+            # 任务生命周期管理（创建/删除）+ 执行操作（开始/暂停）
+            return any(kw in name_lower for kw in ("task_service", "task_manager"))
         elif category == "crawler":
-            # 爬虫核心模块 + 站点适配器 + 任务管理 + 通知
+            # 爬虫核心模块 + 站点适配器 + 任务执行
             return any(kw in name_lower for kw in (
                 ".crawler", "crawl_worker", "task_service",
                 "stats_service", "captcha_handler", "image_downloader",

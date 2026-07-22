@@ -1,10 +1,9 @@
 """
-模块名称：携程景点（Ctrip Scenic）网站适配器
+模块名称：携程旅游（Ctrip Vacation）网站适配器
 
 功能说明：
-    - 携程景点评论页面适配器（you.ctrip.com）
-    - 第 1 页：__NEXT_DATA__ JSON 提取
-    - 第 2+ 页：Selenium 驱动浏览器点击「下一页」翻页
+    - 携程旅游产品评论页面适配器（vacations.ctrip.com）
+    - 全程 Selenium 翻页 + DOM 解析
     - Cookie 统一使用携程登录态
     - 共享 DOM 提取和 URL 工具在 _ctrip_base.py
 """
@@ -14,33 +13,31 @@ import logging
 
 from src.sites.base import SiteAdapter, HttpMethod
 from src.sites.scenic._ctrip_base import (
-    extract_from_dom,
-    extract_from_next_data,
+    extract_from_vacation_dom,
     extract_url_params,
     build_ctrip_url,
-    extract_reviews_from_html,
 )
 
 logger = logging.getLogger("tour-crawler.sites.ctrip")
 
 
-# ==================== Selenium 翻页爬取（景点） ====================
+# ==================== Selenium 翻页爬取（旅游） ====================
 
-def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
-                         timeout: int = 300, stop_check=None,
-                         progress_callback=None, cookie_file=None,
-                         filter_chain=None, task_name: str = "",
-                         driver_ref: list | None = None,
-                         notifier=None, resume_page: int = 0,
-                         resume_count: int = 0,
-                         delay_seconds: float = 2.0) -> tuple[list[dict], int]:
+def selenium_crawl_ctrip_vacation(url: str, max_pages: int = 10,
+                                  max_count: int = 0, timeout: int = 300,
+                                  stop_check=None, progress_callback=None,
+                                  cookie_file=None,
+                                  filter_chain=None, task_name: str = "",
+                                  driver_ref: list | None = None,
+                                  notifier=None, resume_page: int = 0,
+                                  resume_count: int = 0,
+                                  delay_seconds: float = 2.0) -> tuple[list[dict], int]:
     _prefix = f"任务 [{task_name}] " if task_name else ""
     try:
         from selenium import webdriver
         from selenium.webdriver.edge.options import Options
         from selenium.webdriver.common.by import By
         from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
         from selenium.common.exceptions import TimeoutException, NoSuchElementException
     except ImportError:
         logger.error(f"{_prefix}Selenium 未安装，无法翻页爬取")
@@ -69,18 +66,12 @@ def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
         # 构造干净 URL
         params = extract_url_params(url)
         clean_url = build_ctrip_url(
-            params.get("domain", "you.ctrip.com"),
+            params.get("domain", "vacations.ctrip.com"),
             params.get("id", ""),
             params.get("location", ""),
         )
         driver.get(clean_url)
         wait = WebDriverWait(driver, 15)
-
-        # 翻页前切换到"最新"排序
-        latest_btn = driver.find_element(By.XPATH, "//div[@class='sortList']//span[text()='最新']")
-        driver.execute_script("arguments[0].click();", latest_btn)
-        time.sleep(1)
-        logger.info(f"{_prefix}已点击「最新」")
 
         # 断点续爬：快速翻到 resume_page
         start_page = resume_page if resume_page > 1 else 1
@@ -90,12 +81,13 @@ def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
                 if stop_check and stop_check():
                     break
                 try:
-                    next_btn = driver.find_element(By.CSS_SELECTOR, ".ant-pagination-next:not(.ant-pagination-disabled)")
+                    next_btn = driver.find_element(
+                        By.CSS_SELECTOR, '.ct-review-pagination-next:not(.ct-review-pagination-disabled)'
+                    )
                     driver.execute_script("arguments[0].click();", next_btn)
                     time.sleep(1)
                 except NoSuchElementException:
                     logger.warning(f"{_prefix}断点续爬：无法翻到第 {start_page} 页，从当前位置开始")
-                    start_page = _ + 1
                     break
 
         for page in range(start_page, max_pages + 1):
@@ -110,7 +102,7 @@ def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
             page_start = time.time()
 
             try:
-                wait.until(lambda d: d.find_elements(By.CSS_SELECTOR, ".commentItem"))
+                wait.until(lambda d: d.find_elements(By.CSS_SELECTOR, '.ct-review-list-item'))
             except TimeoutException:
                 logger.warning(f"{_prefix}第 {page} 页等待评论加载超时")
                 break
@@ -118,11 +110,7 @@ def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
             time.sleep(1)
 
             html = driver.page_source
-            page_reviews = extract_from_dom(html)
-
-            if page == 1:
-                next_data = extract_from_next_data(html)
-                page_reviews = next_data if next_data else page_reviews
+            page_reviews = extract_from_vacation_dom(html)
 
             raw_count = len(page_reviews)
             if filter_chain and page_reviews:
@@ -157,7 +145,9 @@ def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
 
             if page < max_pages:
                 try:
-                    next_btn = driver.find_element(By.CSS_SELECTOR, ".ant-pagination-next:not(.ant-pagination-disabled)")
+                    next_btn = driver.find_element(
+                        By.CSS_SELECTOR, '.ct-review-pagination-next:not(.ct-review-pagination-disabled)'
+                    )
                     driver.execute_script("arguments[0].click();", next_btn)
                     time.sleep(1.5)
                 except NoSuchElementException:
@@ -181,38 +171,39 @@ def selenium_crawl_ctrip(url: str, max_pages: int = 10, max_count: int = 0,
 
 # ==================== URL 校验 ====================
 
-def _validate_ctrip_url(url: str) -> tuple[bool, str]:
-    """校验是否为有效的携程景点 URL"""
+def _validate_ctrip_vacation_url(url: str) -> tuple[bool, str]:
+    """校验是否为有效的携程旅游产品 URL"""
     from urllib.parse import urlparse
     try:
         host = urlparse(url).netloc.lower()
     except Exception:
         return (False, "无法解析 URL")
-    if "you.ctrip.com" in host:
+    if "vacations.ctrip.com" in host:
         return (True, "")
-    return (False, "仅支持 you.ctrip.com 的携程景点评价页面")
+    return (False, "仅支持 vacations.ctrip.com 的携程旅游评价页面")
 
 
 # ==================== 适配器入口 ====================
 
-def create_ctrip_adapter() -> SiteAdapter:
-    """创建携程景点适配器实例"""
+def create_ctrip_vacation_adapter() -> SiteAdapter:
+    """创建携程旅游适配器实例"""
     return SiteAdapter(
-        site_name="ctrip",
+        site_name="ctrip_vacation",
         site_display_name="携程",
         crawl_type="scenic",
         domain=".ctrip.com",
         login_url="https://passport.ctrip.com/user/login",
-        url_template="https://you.ctrip.com/sight/{id}.html",
+        url_template="https://vacations.ctrip.com/travel/detail/p{id}.html",
         http_method=HttpMethod.GET,
         page_size=10,
         page_start=1,
         max_pages_limit=99999,
         review_selector="",
         custom_extractor=None,
-        raw_html_parser=extract_reviews_from_html,
-        selenium_crawler=selenium_crawl_ctrip,
-        url_validator=_validate_ctrip_url,
+        raw_html_parser=None,
+        selenium_crawler=selenium_crawl_ctrip_vacation,
+        url_validator=_validate_ctrip_vacation_url,
         field_mapping={},
         login_cookie_names=("cticket",),
+        cookie_platform="ctrip",
     )

@@ -339,6 +339,8 @@ def crawl_all_pages(
     task_name: str = "",
     driver_ref: list | None = None,
     notifier=None,
+    resume_page: int = 0,
+    resume_count: int = 0,
 ) -> tuple[list[dict], int]:
     """
     爬取指定网站的全部评论数据（多页自动翻页）。
@@ -359,6 +361,8 @@ def crawl_all_pages(
         stop_check: 停止检测函数，返回 True 时停止爬取
         target_url: 目标页面 URL（用户输入），用作请求 Referer 和 HTML 模式的请求地址
         filter_chain: 过滤器责任链，None 表示不过滤
+        resume_page: 断点续爬起始页码，0 表示从头开始
+        resume_count: 断点续爬已有条数，Selenium 滚动模式用于跳过已收集评论
 
     Returns:
         (通过过滤的评论列表, 被过滤掉的条数) 元组
@@ -394,6 +398,9 @@ def crawl_all_pages(
                     task_name=task_name,
                     driver_ref=driver_ref,
                     notifier=notifier,
+                    resume_page=resume_page,
+                    resume_count=resume_count,
+                    delay_seconds=delay_seconds,
                 )
             except TypeError:
                 # 旧版 selenium_crawler 不支持 filter_chain/driver_ref/notifier
@@ -433,7 +440,10 @@ def crawl_all_pages(
     page_limit = max_pages or adapter.max_pages_limit
     referer = target_url
 
-    for page_num in range(adapter.page_start, adapter.page_start + page_limit):
+    # 断点续爬：优先使用 resume_page，否则从适配器起始页开始
+    start_page = resume_page if resume_page > 0 else adapter.page_start
+
+    for page_num in range(start_page, start_page + page_limit):
         # 检查外部停止请求
         if stop_check and stop_check():
             logger.info(f"{_prefix}爬取任务被外部停止")
